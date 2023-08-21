@@ -1,0 +1,31 @@
+---
+title: ''
+author: "Roan Buma"
+date: "2023-08-15"
+output: html_document
+---
+
+```{r}
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code !="other") %>%
+  # remove no coding
+  filter(!is.na(code)) %>%
+  # fix time
+  mutate(time = ymd(substr(created_at, 0, 10))) %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "populist", "non-populist")) %>%
+  ggplot(aes(x = time)) +
+  # plot
+  geom_histogram(binwidth = 7) +
+  theme_bw()+
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(x = "Year",y="N")+
+  facet_grid(~populist) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```

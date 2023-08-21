@@ -1,0 +1,1463 @@
+---
+title: "public_analysis"
+author: "Roan Buma"
+date: "2023-07-21"
+output: html_document
+---
+
+```{r}
+knitr::purl("public_analysis.Rmd")
+```
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading packages and data
+
+```{r}
+# PACKAGES
+library(dplyr)
+library(tidyr)
+library(haven)
+library(ggplot2)
+library(janitor)
+```
+
+```{r}
+# IMPORT DATA
+df_voters = read_sav("C:/sensitive_data/PRECEDE/EVES+COVID+endsurvey/EVES NL + COVID + end survey.sav")
+```
+
+```{r eval=FALSE}
+# INSPECT DATA
+colnames(df_voters)
+variable_labels = lapply(df_voters, function(x) attr(x, "label"))
+```
+
+```{r}
+# SELECTING VARIABLES
+df_selection = df_voters %>%
+  # precede 3
+  select(Q31.Leftrightendsurvey, # LR
+         Q32.consprogendsurvey, # cP
+         byearendsurvey, # byear
+         sex_recendsurvey, # sex
+         edu_2_recendsurvey, # edu
+         Q24.expen.difficultendsurvey, # making ends meet
+         Q10.populism_1endsurvey, # populism 
+         Q10.populism_2endsurvey, # populism 
+         Q10.populism_3endsurvey, # populism 
+         Q10.populism_4endsurvey, # populism 
+         Q10.populism_5endsurvey, # populism 
+         Q10.populism_6endsurvey, # populism 
+         Q10.populism_7endsurvey, # populism 
+         Q10.populism_8endsurvey, # populism 
+         Q10.populism_9endsurvey, # populism 
+         Q10.populism_10endsurvey, # populism 
+         Q10.populism_11endsurvey, # populism 
+         Q10.populism_12endsurvey, # populism 
+         Q10.populism_13endsurvey, # populism 
+         Q10.populism_14endsurvey, # populism 
+         Q10.populism_15endsurvey, # populism 
+         Q10.populism_16endsurvey, # populism 
+         Q10.populism_17endsurvey, # populism 
+         Q7.PTV.NL_1endsurvey, # PTV
+         Q7.PTV.NL_2endsurvey, # PTV
+         Q7.PTV.NL_13endsurvey, # PTV
+         Q7.PTV.NL_4endsurvey, # PTV
+         Q7.PTV.NL_5endsurvey, # PTV
+         Q7.PTV.NL_6endsurvey, # PTV
+         Q7.PTV.NL_7endsurvey, # PTV
+         Q7.PTV.NL_8endsurvey, # PTV
+         Q7.PTV.NL_9endsurvey, # PTV
+         Q7.PTV.NL_10endsurvey, # PTV
+         Q7.PTV.NL_11endsurvey, # PTV
+         Q7.PTV.NL_12endsurvey, # PTV
+         Q7.PTV.NL_13.0endsurvey, # PTV
+         Q7.PTV.NL_14endsurvey, # PTV
+         Q7.PTV.NL_15endsurvey, # PTV
+         Q7.PTV.NL_16endsurvey, # PTV
+         Q7.PTV.NL_17endsurvey, # PTV
+         vote.recall_recendsurvey, # vote recall
+         Q9.vote.int.NLendsurvey, # vote intent
+         Q35.picom_1endsurvey, # picom 1
+         Q35.picom_2endsurvey, # picom 2
+         Q35.picom_3endsurvey, # picom 3
+         Q35.picom_4endsurvey, # picom 4
+         Q35.picom_5endsurvey, # picom 5
+         Q36.core.populism_1endsurvey, # core populism 1
+         Q36.core.populism_2endsurvey, # core populism 2
+         Q36.core.populism_3endsurvey, # core populism 3
+         Q36.core.populism_4endsurvey, # core populism 4
+         Q36.core.populism_5endsurvey, # core populism 5
+         Q36.core.populism_6endsurvey, # core populism 6
+         Q36.core.populism_7endsurvey, # core populism 7
+         Q36.core.populism_8endsurvey, # core populism 8
+         Q36.core.populism_9endsurvey, # core populism 9
+         Q36.core.populism_10endsurvey, # core populism 10
+         Q36.core.populism_11endsurvey, # core populism 11
+         Q36.core.populism_12endsurvey, # core populism 12
+         Q36.core.populism_13endsurvey, # core populism 13
+         Q36.core.populism_14endsurvey, # core populism 14
+         Q36.core.populism_15endsurvey, # core populism 15
+         Q34.trust_2endsurvey,# trust in media
+         Q34.trust_4endsurvey,# trust in twitter
+         # PRECEDE 2
+         Q32_1covidwv2, # media use tv
+         Q32_2covidwv2, # media use internet
+         Q32_3covidwv2, # media use newspapers
+         Q32_4covidwv2, # media use social media
+         Q33covidwv2, # hours spent on internet
+         # PRECEDE 1
+         # Conspiracy_1covid, # covid conspiracy 1
+         # Conspiracy_4covid, # covid conspiracy 2
+         # Conspiracy_8covid, # covid conspiracy 3
+         # Conspiracy_15covid, # covid conspiracy 4
+         # conspiracy_covid_2_22covid, # covid conspiracy 5
+         # conspiracy_covid_2_23covid, # covid conspiracy 6
+         # conspiracy_covid_2_25covid, # covid conspiracy 7
+         # weights
+         #weight_trimmed_0.995covid,
+         weight_trimmed_0.995covidwv2,
+         weight_trimmed_0.995endsurvey
+         )
+```
+
+```{r}
+# FILTERING DATA FOR COMPLETE CASES ONLY (PARTICIPATED IN PRECEDE 1, 2 AND 3)
+df_selection = df_selection %>%
+  # remove cases with missing data for PRECEDE 3 (end survey)
+  #filter(!is.na(weight_trimmed_0.995covid)) %>%
+  # remove cases with missing data for PRECEDE 2 (covid wv2)
+  filter(!is.na(weight_trimmed_0.995covidwv2)) %>%
+  # remove cases with missing data for PRECEDE 1 (covid wv1)
+  filter(!is.na(weight_trimmed_0.995endsurvey))
+```
+
+```{r}
+dim(df_selection)
+```
+
+1264 participants participated in PRECEDE_2 and PRECEDE_3 in the Netherlands. 
+
+# DATA PREPARATION
+
+## age
+
+```{r}
+# recoding age
+df_selection$age = as.numeric(2023 - df_selection$byearendsurvey)
+```
+
+## edu
+
+```{r}
+attr(df_selection$edu_2_recendsurvey, "labels")
+
+table(df_selection$edu_2_recendsurvey)
+
+df_selection = df_selection %>%
+  mutate(edu_rec = case_when(edu_2_recendsurvey == 1 ~ 0,
+                             edu_2_recendsurvey == 2 ~ 1,
+                             TRUE ~ NA))
+
+table(df_selection$edu_rec, useNA = "ifany")
+```
+
+## gender
+
+```{r}
+# recoding gender (dummy)
+table(df_selection$sex_recendsurvey)
+df_selection$woman = ifelse(df_selection$sex_recendsurvey == 1, 0, 1)
+table(df_selection$woman)
+```
+
+## LR
+
+```{r}
+# recoding LR
+table(df_selection$Q31.Leftrightendsurvey)
+df_selection$LR_rec = df_selection$Q31.Leftrightendsurvey - 1
+table(df_selection$LR_rec)
+```
+
+## CP
+
+```{r}
+# recoding CP
+table(df_selection$Q32.consprogendsurvey)
+df_selection$CP_rec = df_selection$Q32.consprogendsurvey - 1
+table(df_selection$CP_rec)
+```
+
+## populism index 1 (17 questions)
+
+```{r}
+attr(df_selection$Q10.populism_1endsurvey, which = "label")
+attr(df_selection$Q10.populism_2endsurvey, which = "label")
+attr(df_selection$Q10.populism_3endsurvey, which = "label")
+attr(df_selection$Q10.populism_4endsurvey, which = "label")
+attr(df_selection$Q10.populism_5endsurvey, which = "label")
+attr(df_selection$Q10.populism_6endsurvey, which = "label")
+attr(df_selection$Q10.populism_7endsurvey, which = "label")
+attr(df_selection$Q10.populism_8endsurvey, which = "label")
+attr(df_selection$Q10.populism_9endsurvey, which = "label")
+attr(df_selection$Q10.populism_10endsurvey, which = "label")
+attr(df_selection$Q10.populism_11endsurvey, which = "label")
+attr(df_selection$Q10.populism_12endsurvey, which = "label")
+attr(df_selection$Q10.populism_13endsurvey, which = "label")
+attr(df_selection$Q10.populism_14endsurvey, which = "label")
+attr(df_selection$Q10.populism_15endsurvey, which = "label")
+attr(df_selection$Q10.populism_16endsurvey, which = "label")
+attr(df_selection$Q10.populism_17endsurvey, which = "label")
+```
+```{r}
+attr(df_selection$Q10.populism_1endsurvey, which = "labels")
+```
+
+
+```{r}
+# recoding for 2, 5, 8 and 14 needed
+df_selection = df_selection %>%
+  mutate(Q10.populism_2endsurvey_rec = case_when(Q10.populism_2endsurvey == 1 ~ 5,
+                                                 Q10.populism_2endsurvey == 2 ~ 4,
+                                                 Q10.populism_2endsurvey == 3 ~ 3,
+                                                 Q10.populism_2endsurvey == 4 ~ 2,
+                                                 Q10.populism_2endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q10.populism_5endsurvey_rec = case_when(Q10.populism_5endsurvey == 1 ~ 5,
+                                                 Q10.populism_5endsurvey == 2 ~ 4,
+                                                 Q10.populism_5endsurvey == 3 ~ 3,
+                                                 Q10.populism_5endsurvey == 4 ~ 2,
+                                                 Q10.populism_5endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q10.populism_8endsurvey_rec = case_when(Q10.populism_8endsurvey == 1 ~ 5,
+                                                 Q10.populism_8endsurvey == 2 ~ 4,
+                                                 Q10.populism_8endsurvey == 3 ~ 3,
+                                                 Q10.populism_8endsurvey == 4 ~ 2,
+                                                 Q10.populism_8endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q10.populism_14endsurvey_rec = case_when(Q10.populism_14endsurvey == 1 ~ 5,
+                                                 Q10.populism_14endsurvey == 2 ~ 4,
+                                                 Q10.populism_14endsurvey == 3 ~ 3,
+                                                 Q10.populism_14endsurvey == 4 ~ 2,
+                                                 Q10.populism_14endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA))
+```
+
+
+```{r}
+# create df for alpha
+df_populism = df_selection %>%
+  select(Q10.populism_1endsurvey, # populism 
+         Q10.populism_2endsurvey_rec, # populism 
+         Q10.populism_3endsurvey, # populism 
+         Q10.populism_4endsurvey, # populism 
+         Q10.populism_5endsurvey_rec, # populism 
+         Q10.populism_6endsurvey, # populism 
+         Q10.populism_7endsurvey, # populism 
+         Q10.populism_8endsurvey_rec, # populism 
+         Q10.populism_9endsurvey, # populism 
+         Q10.populism_10endsurvey, # populism 
+         Q10.populism_11endsurvey, # populism 
+         Q10.populism_12endsurvey, # populism 
+         Q10.populism_13endsurvey, # populism 
+         Q10.populism_14endsurvey_rec, # populism 
+         Q10.populism_15endsurvey, # populism 
+         Q10.populism_16endsurvey, # populism 
+         Q10.populism_17endsurvey) # populism 
+
+populism_alpha = psych::alpha(df_populism)
+
+# total alpha
+populism_alpha$total
+```
+standardized alpha = .76
+
+```{r}
+# create scale
+df_selection = df_selection %>%
+  mutate(populism_scale_1 = (Q10.populism_1endsurvey+ # populism 
+         Q10.populism_2endsurvey+ # populism 
+         Q10.populism_3endsurvey+ # populism 
+         Q10.populism_4endsurvey+ # populism 
+         Q10.populism_5endsurvey+ # populism 
+         Q10.populism_6endsurvey+ # populism 
+         Q10.populism_7endsurvey+ # populism 
+         Q10.populism_8endsurvey+ # populism 
+         Q10.populism_9endsurvey+ # populism 
+         Q10.populism_10endsurvey+ # populism 
+         Q10.populism_11endsurvey+ # populism 
+         Q10.populism_12endsurvey+ # populism 
+         Q10.populism_13endsurvey+ # populism 
+         Q10.populism_14endsurvey+ # populism 
+         Q10.populism_15endsurvey+ # populism 
+         Q10.populism_16endsurvey+ # populism 
+         Q10.populism_17endsurvey)/17) # populism 
+```
+
+```{r}
+mean(df_selection$populism_scale_1, na.rm=T)
+sd(df_selection$populism_scale_1, na.rm=T)
+```
+
+
+## populism index 2 (15 questions)
+
+```{r}
+attr(df_selection$Q36.core.populism_1endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_2endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_3endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_4endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_5endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_6endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_7endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_8endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_9endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_10endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_11endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_12endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_13endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_14endsurvey, which = "label")
+attr(df_selection$Q36.core.populism_15endsurvey, which = "label")
+```
+
+
+```{r}
+# recode 2, 6, 8, 14
+df_selection = df_selection %>%
+  mutate(Q36.core.populism_2endsurvey_rec = case_when(Q36.core.populism_2endsurvey == 1 ~ 5,
+                                                 Q36.core.populism_2endsurvey == 2 ~ 4,
+                                                 Q36.core.populism_2endsurvey == 3 ~ 3,
+                                                 Q36.core.populism_2endsurvey == 4 ~ 2,
+                                                 Q36.core.populism_2endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q36.core.populism_6endsurvey_rec = case_when(Q36.core.populism_6endsurvey == 1 ~ 5,
+                                                 Q36.core.populism_6endsurvey == 2 ~ 4,
+                                                 Q36.core.populism_6endsurvey == 3 ~ 3,
+                                                 Q36.core.populism_6endsurvey == 4 ~ 2,
+                                                 Q36.core.populism_6endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q36.core.populism_8endsurvey_rec = case_when(Q36.core.populism_8endsurvey == 1 ~ 5,
+                                                 Q36.core.populism_8endsurvey == 2 ~ 4,
+                                                 Q36.core.populism_8endsurvey == 3 ~ 3,
+                                                 Q36.core.populism_8endsurvey == 4 ~ 2,
+                                                 Q36.core.populism_8endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA)) %>%
+  mutate(Q36.core.populism_14endsurvey_rec = case_when(Q36.core.populism_14endsurvey == 1 ~ 5,
+                                                 Q36.core.populism_14endsurvey == 2 ~ 4,
+                                                 Q36.core.populism_14endsurvey == 3 ~ 3,
+                                                 Q36.core.populism_14endsurvey == 4 ~ 2,
+                                                 Q36.core.populism_14endsurvey == 5 ~ 1,
+                                                 TRUE ~ NA))
+```
+
+
+```{r}
+df_populism_core = df_selection %>%
+  select(Q36.core.populism_1endsurvey,
+         Q36.core.populism_2endsurvey_rec,
+         Q36.core.populism_3endsurvey,
+         Q36.core.populism_4endsurvey,
+         Q36.core.populism_5endsurvey,
+         Q36.core.populism_6endsurvey_rec,
+         Q36.core.populism_7endsurvey,
+         Q36.core.populism_8endsurvey_rec,
+         Q36.core.populism_9endsurvey,
+         Q36.core.populism_10endsurvey,
+         Q36.core.populism_12endsurvey,
+         Q36.core.populism_13endsurvey,
+         Q36.core.populism_14endsurvey_rec,
+         Q36.core.populism_15endsurvey
+         )
+
+populism_core_alpha = psych::alpha(df_populism_core)
+
+populism_core_alpha$total
+```
+standardized alpha = .83
+
+```{r}
+# create scale
+df_selection = df_selection %>%
+  mutate(populism_scale_2 = (Q36.core.populism_1endsurvey+
+         Q36.core.populism_2endsurvey_rec+
+         Q36.core.populism_3endsurvey+
+         Q36.core.populism_4endsurvey+
+         Q36.core.populism_5endsurvey+
+         Q36.core.populism_6endsurvey_rec+
+         Q36.core.populism_7endsurvey+
+         Q36.core.populism_8endsurvey_rec+
+         Q36.core.populism_9endsurvey+
+         Q36.core.populism_10endsurvey+
+         Q36.core.populism_12endsurvey+
+         Q36.core.populism_13endsurvey+
+         Q36.core.populism_14endsurvey_rec+
+         Q36.core.populism_15endsurvey)/15)
+```
+
+
+## PTVs
+
+Voters are considered "populist" if they have one of the populist parties in their choice set. This was determined on the basis of Propensity to Vote for those parties (PTV). Respondents answer the question "how likely is it that you will ever vote for the following party:" for each political party in the Netherlands.
+
+In the context of this study, voters that give a 7 or higher to any of the populist parties (PVV, FVD, JA21, BBB) are considered potential populist voters.
+
+PTVs are a better measure than asking people what they will vote if there would be elections today or what they voted in the previous election, because there are so many political parties in the Netherlands and because 
+
+```{r}
+table(df_selection$Q7.PTV.NL_1endsurvey)
+```
+
+```{r}
+# all
+attr(df_selection$Q7.PTV.NL_1endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_2endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_13endsurvey, which = "label")
+df_selection$PTV_SP = as.numeric(df_selection$Q7.PTV.NL_13endsurvey)
+
+attr(df_selection$Q7.PTV.NL_4endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_5endsurvey, which = "label")
+df_selection$PTV_PVV = as.numeric(df_selection$Q7.PTV.NL_5endsurvey)
+
+attr(df_selection$Q7.PTV.NL_6endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_7endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_8endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_9endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_10endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_11endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_12endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_13.0endsurvey, which = "label")
+df_selection$PTV_FVD = as.numeric(df_selection$Q7.PTV.NL_13.0endsurvey)
+
+attr(df_selection$Q7.PTV.NL_14endsurvey, which = "label")
+df_selection$PTV_BBB = as.numeric(df_selection$Q7.PTV.NL_14endsurvey)
+
+attr(df_selection$Q7.PTV.NL_15endsurvey, which = "label")
+df_selection$PTV_JA21 = as.numeric(df_selection$Q7.PTV.NL_15endsurvey)
+
+attr(df_selection$Q7.PTV.NL_16endsurvey, which = "label")
+
+attr(df_selection$Q7.PTV.NL_17endsurvey, which = "label")
+```
+
+```{r}
+# populists
+attr(df_selection$Q7.PTV.NL_5endsurvey, which = "label")
+attr(df_selection$Q7.PTV.NL_13.0endsurvey, which = "label")
+attr(df_selection$Q7.PTV.NL_14endsurvey, which = "label")
+attr(df_selection$Q7.PTV.NL_15endsurvey, which = "label")
+```
+```{r}
+# create dummy, only 7 or higher (7 because PTV is 1-11 coded)
+df_selection$populist_in_choiceset = case_when(
+  # populist
+  df_selection$Q7.PTV.NL_5endsurvey > 7 ~ 1,
+  df_selection$Q7.PTV.NL_13.0endsurvey > 7 ~ 1,
+  df_selection$Q7.PTV.NL_14endsurvey > 7 ~ 1,
+  df_selection$Q7.PTV.NL_15endsurvey > 7 ~ 1,
+  # non populism
+  df_selection$Q7.PTV.NL_5endsurvey <= 7 ~ 0,
+  df_selection$Q7.PTV.NL_13.0endsurvey <= 7 ~ 0,
+  df_selection$Q7.PTV.NL_14endsurvey <= 7 ~ 0,
+  df_selection$Q7.PTV.NL_15endsurvey <= 7 ~ 0,
+  # NA
+  TRUE ~ NA
+)
+
+table(df_selection$populist_in_choiceset, useNA = "ifany")
+```
+
+## Vote Recall
+
+
+```{r}
+table(df_selection$vote.recall_recendsurvey)
+
+attr(df_selection$vote.recall_recendsurvey, which = "labels")
+
+# need recode
+df_selection = df_selection %>%
+  mutate(vote.recall_recendsurvey = haven::as_factor(vote.recall_recendsurvey))
+```
+```{r}
+table(df_selection$Q9.vote.int.NLendsurvey)
+
+# recode
+df_selection = df_selection %>%
+  mutate(Q9.vote.int.NLendsurvey = haven::as_factor(Q9.vote.int.NLendsurvey))
+
+table(df_selection$Q9.vote.int.NLendsurvey)
+```
+
+## picom (conspiracy)
+
+```{r}
+attr(df_selection$Q35.picom_1endsurvey, which = "label")
+attr(df_selection$Q35.picom_1endsurvey, which = "labels")
+```
+
+
+```{r}
+# picom
+table(df_selection$Q35.picom_1endsurvey)
+table(df_selection$Q35.picom_2endsurvey)
+table(df_selection$Q35.picom_3endsurvey)
+table(df_selection$Q35.picom_4endsurvey)
+table(df_selection$Q35.picom_5endsurvey)
+```
+```{r}
+df_selection$picom_1_rec = df_selection$Q35.picom_1endsurvey - 1
+df_selection$picom_2_rec = df_selection$Q35.picom_2endsurvey - 1
+df_selection$picom_3_rec = df_selection$Q35.picom_3endsurvey - 1
+df_selection$picom_4_rec = df_selection$Q35.picom_4endsurvey - 1
+df_selection$picom_5_rec = df_selection$Q35.picom_5endsurvey - 1
+```
+
+```{r}
+# create subdata for picom
+df_picom = df_selection %>%
+  select(picom_1_rec, picom_2_rec, picom_3_rec, picom_4_rec, picom_5_rec)
+
+# calculate alpha
+picom_alpha = psych::alpha(df_picom)
+
+# alpha
+picom_alpha$total
+```
+The PICOM has a high std alpha of .90
+
+```{r}
+df_selection = df_selection %>%
+  mutate(picom_index = (picom_1_rec + picom_2_rec + picom_3_rec + picom_4_rec + picom_5_rec) / 5)
+```
+```{r}
+table(df_selection$picom_index, useNA = "ifany")
+```
+## populist vote
+
+```{r}
+table(df_selection$vote.recall_recendsurvey)
+```
+
+
+```{r}
+df_selection = df_selection %>%
+  mutate(populist_vote = case_when(vote.recall_recendsurvey == "PVV" ~ 1,
+                                   vote.recall_recendsurvey == "FvD" ~ 1,
+                                   vote.recall_recendsurvey == "JA21" ~ 1,
+                                   vote.recall_recendsurvey == "BBB" ~ 1,
+                                   Q9.vote.int.NLendsurvey == "PVV" ~ 1,
+                                   Q9.vote.int.NLendsurvey == "PVV" ~ 1,
+                                   Q9.vote.int.NLendsurvey == "PVV" ~ 1,
+                                   Q9.vote.int.NLendsurvey == "PVV" ~ 1,
+                                   is.na(vote.recall_recendsurvey) ~ NA,
+                                   is.na(Q9.vote.int.NLendsurvey) ~ NA,
+                                   TRUE ~ 0))
+
+table(df_selection$populist_vote, useNA = "ifany")
+```
+
+## coping with income
+
+```{r}
+attr(df_selection$Q24.expen.difficultendsurvey, which = "label")
+
+attr(df_selection$Q24.expen.difficultendsurvey, which = "labels")
+
+# rename
+df_selection$coping_income = as.numeric(df_selection$Q24.expen.difficultendsurvey)
+```
+
+## trust in media
+
+```{r}
+attr(df_selection$Q34.trust_2endsurvey, "label")
+attr(df_selection$Q34.trust_2endsurvey, "labels")
+
+df_selection$trust_media = as.numeric(df_selection$Q34.trust_2endsurvey)
+
+table(df_selection$trust_media)
+```
+## trust in Twitter
+
+```{r}
+attr(df_selection$Q34.trust_4endsurvey, "label")
+attr(df_selection$Q34.trust_4endsurvey, "labels")
+
+df_selection$trust_twitter = as.numeric(df_selection$Q34.trust_4endsurvey)
+
+table(df_selection$trust_twitter)
+```
+## media use
+
+```{r}
+attr(df_selection$Q32_1covidwv2, "label")
+attr(df_selection$Q32_1covidwv2, "labels")
+
+df_selection$follow_news_tv = as.numeric(df_selection$Q32_1covidwv2)
+
+table(df_selection$follow_news_tv)
+```
+```{r}
+attr(df_selection$Q32_2covidwv2, "label")
+attr(df_selection$Q32_2covidwv2, "labels")
+
+df_selection$follow_news_internet = as.numeric(df_selection$Q32_2covidwv2)
+
+table(df_selection$follow_news_internet)
+```
+```{r}
+attr(df_selection$Q32_3covidwv2, "label")
+attr(df_selection$Q32_3covidwv2, "labels")
+
+df_selection$follow_news_newspapers = as.numeric(df_selection$Q32_3covidwv2)
+
+table(df_selection$follow_news_newspapers)
+```
+```{r}
+attr(df_selection$Q32_4covidwv2, "label")
+attr(df_selection$Q32_4covidwv2, "labels")
+
+df_selection$follow_news_socialmedia = as.numeric(df_selection$Q32_4covidwv2)
+
+table(df_selection$follow_news_socialmedia)
+```
+
+```{r}
+# weights
+df_selection$weight_trimmed_0.995endsurvey = as.numeric(df_selection$weight_trimmed_0.995endsurvey)
+```
+
+
+```{r}
+# create trust differential variable
+df_selection$trust_differential = df_selection$trust_media - df_selection$trust_twitter
+```
+
+
+# Analyses
+
+Making dataset smaller
+
+```{r}
+# making dataset smaller for analyses
+df_analyses = df_selection %>%
+  select(age, edu_rec, woman, coping_income, # structural model
+         follow_news_tv, follow_news_internet, follow_news_newspapers, follow_news_socialmedia, # media model
+         picom_index, #psychological model
+         LR_rec, CP_rec, populism_scale_1, # political model
+         trust_media, trust_twitter, # dependent variables
+         weight_trimmed_0.995endsurvey, # weights
+  ) %>%
+  # removing cases with missing data
+  na.omit()
+
+nrow(df_analyses)
+nrow(df_selection)
+
+# how many cases with missing data were removed?
+nrow(df_selection) - nrow(df_analyses)
+```
+
+
+
+## Descriptive Statistics
+
+```{r}
+# age
+mean(df_analyses$age, na.rm=T)
+sd(df_analyses$age, na.rm=T)
+min(df_analyses$age)
+max(df_analyses$age)
+nrow(df_analyses[!is.na(df_analyses$age),])
+
+#hist(df_analyses$age)
+```
+
+
+```{r}
+# edu
+tabyl(df_analyses$edu_rec)
+nrow(df_analyses[!is.na(df_analyses$edu_rec),])
+```
+
+
+```{r}
+# gender
+tabyl(df_analyses$woman)
+nrow(df_analyses[!is.na(df_analyses$woman),])
+```
+
+```{r}
+# LR
+mean(df_analyses$LR_rec, na.rm=T)
+sd(df_analyses$LR_rec, na.rm=T)
+min(df_analyses$LR_rec, na.rm = T)
+max(df_analyses$LR_rec, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$LR_rec),])
+```
+```{r}
+# LR
+mean(df_analyses$CP_rec, na.rm=T)
+sd(df_analyses$CP_rec, na.rm=T)
+min(df_analyses$CP_rec, na.rm = T)
+max(df_analyses$CP_rec, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$CP_rec),])
+```
+```{r}
+# news tv
+mean(df_analyses$follow_news_tv, na.rm=T)
+sd(df_analyses$follow_news_tv, na.rm=T)
+min(df_analyses$follow_news_tv, na.rm = T)
+max(df_analyses$follow_news_tv, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$follow_news_tv),])
+```
+
+```{r}
+# news internet
+mean(df_analyses$follow_news_internet, na.rm=T)
+sd(df_analyses$follow_news_internet, na.rm=T)
+min(df_analyses$follow_news_internet, na.rm = T)
+max(df_analyses$follow_news_internet, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$follow_news_internet),])
+```
+
+```{r}
+# news newspapers
+mean(df_analyses$follow_news_newspapers, na.rm=T)
+sd(df_analyses$follow_news_newspapers, na.rm=T)
+min(df_analyses$follow_news_newspapers, na.rm = T)
+max(df_analyses$follow_news_newspapers, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$follow_news_newspapers),])
+```
+
+```{r}
+# news social media
+mean(df_analyses$follow_news_socialmedia, na.rm=T)
+sd(df_analyses$follow_news_socialmedia, na.rm=T)
+min(df_analyses$follow_news_socialmedia, na.rm = T)
+max(df_analyses$follow_news_socialmedia, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$follow_news_socialmedia),])
+```
+
+```{r}
+# trust in media
+mean(df_analyses$trust_media, na.rm=T)
+sd(df_analyses$trust_media, na.rm=T)
+min(df_analyses$trust_media, na.rm = T)
+max(df_analyses$trust_media, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$trust_media),])
+```
+
+```{r}
+# trust in Twitter
+mean(df_analyses$trust_twitter, na.rm=T)
+sd(df_analyses$trust_twitter, na.rm=T)
+min(df_analyses$trust_twitter, na.rm = T)
+max(df_analyses$trust_twitter, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$trust_twitter),])
+```
+
+```{r}
+# populism
+mean(df_analyses$populism_scale_1, na.rm=T)
+sd(df_analyses$populism_scale_1, na.rm=T)
+min(df_analyses$populism_scale_1, na.rm = T)
+max(df_analyses$populism_scale_1, na.rm = T)
+nrow(df_analyses[!is.na(df_analyses$populism_scale_1),])
+```
+
+
+
+# Models
+
+## Trust in Media
+
+```{r}
+# trust in media model 1
+model_trust_media_1 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_1)
+```
+
+```{r}
+# trust in media model 2
+model_trust_media_2 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_2)
+```
+
+```{r}
+# trust in media model 3
+model_trust_media_3 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_3)
+```
+
+```{r}
+# trust in media model 4
+model_trust_media_4 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) + scale(populism_scale_1),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_4)
+```
+
+```{r}
+# comparing models
+anova(model_trust_media_1, model_trust_media_2, model_trust_media_3, model_trust_media_4)
+```
+
+## Trust in Twitter
+
+```{r}
+# trust in twitter model
+model_trust_twitter_1 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_1)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_2 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_2)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_3 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_3)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_4 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) + scale(populism_scale_1),
+                       data = df_analyses,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_4)
+```
+
+```{r}
+anova(model_trust_twitter_1, model_trust_twitter_2, model_trust_twitter_3, model_trust_twitter_4)
+```
+
+# Robustness checks
+
+```{r}
+# populist vote
+df_selection %>%
+  filter(!is.na(populist_vote)) %>%
+  group_by(populist_vote) %>%
+  summarise(mean_trust_media = weighted.mean(Q34.trust_2endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust media
+            mean_trust_facebook = weighted.mean(Q34.trust_3endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust facebook
+            mean_trust_twitter = weighted.mean(Q34.trust_4endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust twitter
+            mean_tv = weighted.mean(Q32_1covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # tv
+            mean_newspaper = weighted.mean(Q32_2covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # newspaper
+            mean_internet = weighted.mean(Q32_3covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # internet
+            mean_socialmedia = weighted.mean(Q32_4covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey) # social media
+            )
+```
+
+```{r}
+# populist choice set
+df_selection %>%
+  filter(!is.na(populist_in_choiceset)) %>%
+  group_by(populist_in_choiceset) %>%
+  summarise(mean_trust_media = weighted.mean(Q34.trust_2endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust media
+            mean_trust_facebook = weighted.mean(Q34.trust_3endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust facebook
+            mean_trust_twitter = weighted.mean(Q34.trust_4endsurvey, na.rm = T, w = weight_trimmed_0.995endsurvey), # trust twitter
+            mean_tv = weighted.mean(Q32_1covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # tv
+            mean_internet = weighted.mean(Q32_2covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # newspaper
+            mean_newspaper = weighted.mean(Q32_3covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey), # internet
+            mean_socialmedia = weighted.mean(Q32_4covidwv2, na.rm = T, w = weight_trimmed_0.995endsurvey) # social media
+            )
+```
+
+Among those with a populist party in their choiceset:
+ - trust in media is LOWER
+ - trust in facebook is HIGHER
+ - trust in twitter is HIGHER
+ - tv use same
+ - newspaper use lower
+ - internet use lower
+ - social media use higher
+
+# Tables for Paper
+
+## descriptives
+
+```{r}
+library(stargazer)
+```
+
+```{r}
+continuous_variables = df_analyses[c("age",
+                                      "coping_income",
+                                      "follow_news_tv",
+                                      "follow_news_internet",
+                                      "follow_news_newspapers",
+                                      "follow_news_socialmedia",
+                                      "picom_index",
+                                      "LR_rec",
+                                      "CP_rec",
+                                      "populism_scale_1",
+                                      "trust_media",
+                                      "trust_twitter")] %>%
+  as.data.frame()
+
+
+stargazer(continuous_variables, digits=2)
+```
+## regression
+
+```{r}
+stargazer(model_trust_twitter_1,
+          model_trust_twitter_2,
+          model_trust_twitter_3,
+          digits = 2
+          # covariate.labels = c("Age",
+          #                      "Education",
+          #                      "Gender",
+          #                      "Coping with Income",
+          #                      "Follow news TV",
+          #                      "Follow news newspapers",
+          #                      "Follow news internet",
+          #                      "Follow news social media",
+          #                      "Conspiracy Beliefs",
+          #                      "Left-right",
+          #                      "Conservative-Progressive",
+          #                      "Populist attitudes",
+          #                      "a")
+          )
+```
+
+```{r}
+stargazer(model_trust_twitter_4)
+```
+
+
+```{r}
+# shorter model names for stargazer
+mtt_1 = model_trust_twitter_1
+mtt_2 = model_trust_twitter_2
+mtt_3 = model_trust_twitter_3
+mtt_4 = model_trust_twitter_4
+
+mtm_1 = model_trust_media_1
+mtm_2 = model_trust_media_2
+mtm_3 = model_trust_media_3
+mtm_4 = model_trust_media_4
+```
+
+
+```{r}
+# check model media
+# stargazer(mtm_1,
+#           mtm_2,
+#           mtm_3,
+#           mtm_4)
+
+# make beautiful
+stargazer(mtm_1,
+          mtm_2,
+          mtm_3,
+          mtm_4,
+          digits = 2,
+          covariate.labels = c("Age",
+                               "Theoretical Education (dummy)",
+                               "Woman (dummy)",
+                               "Coping with Income",
+                               "Follow news TV",
+                               "Follow news newspapers",
+                               "Follow news internet",
+                               "Follow news social media",
+                               "Conspiracy Beliefs",
+                               "Left-Right",
+                               "Conservative-Progressive",
+                               "Populist Attitudes",
+                               "Constant"),
+          # sig cutoff
+          star.cutoffs = c(0.05, 0.01, 0.001)
+          )
+```
+
+```{r}
+# check model twitter
+stargazer(mtt_1,
+          mtt_2,
+          mtt_3,
+          mtt_4)
+
+# make beautiful
+stargazer(mtt_1,
+          mtt_2,
+          mtt_3,
+          mtt_4,
+          digits = 2,
+          covariate.labels = c("Age",
+                               "Theoretical Education",
+                               "Woman",
+                               "Coping with Income",
+                               "Follow news TV",
+                               "Follow news newspapers",
+                               "Follow news internet",
+                               "Follow news social media",
+                               "Conspiracy Beliefs",
+                               "Left-Right",
+                               "Conservative-Progressive",
+                               "Populist Attitudes",
+                               "Constant"),
+          # sig cutoff
+          star.cutoffs = c(0.05, 0.01, 0.001)
+          )
+```
+
+# Robustness Checks (PTV + Trust Differential)
+
+```{r}
+# making dataset smaller for analyses
+df_analyses_2 = df_selection %>%
+  select(age, edu_rec, woman, coping_income, # structural model
+         follow_news_tv, follow_news_internet, follow_news_newspapers, follow_news_socialmedia, # media model
+         picom_index, #psychological model
+         LR_rec, CP_rec, populism_scale_1, # political model
+         trust_media, trust_twitter, trust_differential, # dependent variables
+         weight_trimmed_0.995endsurvey, # weights
+         # populist parties PTVS
+         # PTV_SP, # SP
+         # PTV_PVV, # PVV
+         # PTV_FVD, # FVD
+         # PTV_BBB, # BBB
+         # PTV_JA21, # JA21
+  ) %>%
+  # removing cases with missing data
+  na.omit()
+
+nrow(df_analyses_2)
+nrow(df_selection)
+
+# how many cases with missing data were removed?
+nrow(df_selection) - nrow(df_analyses)
+```
+
+```{r}
+mean(df_analyses_2$trust_differential)
+sd(df_analyses_2$trust_differential)
+```
+```{r}
+hist(df_analyses_2$trust_differential)
+```
+
+```{r}
+table(df_analyses_2$trust_differential)
+```
+
+## Model with trust differential
+
+```{r}
+# trust in media model 1
+model_trust_differential_1 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses_2,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_1)
+```
+
+```{r}
+# trust in media model 2
+model_trust_differential_2 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses_2,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_2)
+```
+
+```{r}
+# trust in media model 3
+model_trust_differential_3 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses_2,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_3)
+```
+
+```{r}
+# trust in media model 4
+model_trust_differential_4 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) + scale(populism_scale_1),
+                       data = df_analyses_2,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_4)
+```
+
+```{r}
+# comparing models
+anova(model_trust_differential_1, model_trust_differential_2, model_trust_differential_3, model_trust_differential_4)
+```
+
+## trust differential table for paper
+
+```{r}
+# shorter model names for stargazer
+mtd_1 = model_trust_differential_1
+mtd_2 = model_trust_differential_2
+mtd_3 = model_trust_differential_3
+mtd_4 = model_trust_differential_4
+```
+
+```{r}
+# check model media
+stargazer(mtd_1,
+          mtd_2,
+          mtd_3,
+          mtd_4)
+
+# make beautiful
+stargazer(mtd_1,
+          mtd_2,
+          mtd_3,
+          mtd_4,
+          digits = 2,
+          covariate.labels = c("Age",
+                               "Theoretical Education (dummy)",
+                               "Woman (dummy)",
+                               "Coping with Income",
+                               "Follow news TV",
+                               "Follow news newspapers",
+                               "Follow news internet",
+                               "Follow news social media",
+                               "Conspiracy Beliefs",
+                               "Left-Right",
+                               "Conservative-Progressive",
+                               "Populist Attitudes",
+                               "Constant"),
+          # sig cutoff
+          star.cutoffs = c(0.05, 0.01, 0.001)
+          )
+```
+
+## PTVs instead of populism scale
+
+```{r}
+# making dataset smaller for analyses
+df_analyses_3 = df_selection %>%
+  select(age, edu_rec, woman, coping_income, # structural model
+         follow_news_tv, follow_news_internet, follow_news_newspapers, follow_news_socialmedia, # media model
+         picom_index, #psychological model
+         LR_rec, CP_rec, populism_scale_1, # political model
+         trust_media, trust_twitter, trust_differential, # dependent variables
+         weight_trimmed_0.995endsurvey, # weights
+         # populist parties PTVS
+         PTV_SP, # SP
+         PTV_PVV, # PVV
+         PTV_FVD, # FVD
+         PTV_BBB, # BBB
+         PTV_JA21, # JA21
+  ) %>%
+  # removing cases with missing data
+  na.omit()
+
+nrow(df_analyses_2)
+nrow(df_selection)
+
+# how many cases with missing data were removed?
+nrow(df_selection) - nrow(df_analyses)
+```
+
+```{r}
+df_analyses_3$PTV_SP = df_analyses_3$PTV_SP - 1
+df_analyses_3$PTV_PVV = df_analyses_3$PTV_PVV - 1
+df_analyses_3$PTV_FVD = df_analyses_3$PTV_FVD - 1
+df_analyses_3$PTV_BBB = df_analyses_3$PTV_BBB - 1
+df_analyses_3$PTV_JA21 = df_analyses_3$PTV_JA21 - 1
+```
+
+
+```{r}
+hist(df_analyses_3$PTV_SP)
+hist(df_analyses_3$PTV_PVV)
+hist(df_analyses_3$PTV_FVD)
+hist(df_analyses_3$PTV_BBB)
+hist(df_analyses_3$PTV_JA21)
+```
+
+
+## Trust in Media
+
+```{r}
+# trust in media model 1
+model_trust_media_1 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_1)
+```
+
+```{r}
+# trust in media model 2
+model_trust_media_2 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_2)
+```
+
+```{r}
+# trust in media model 3
+model_trust_media_3 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_3)
+```
+
+```{r}
+# trust in media model 4
+model_trust_media_4 = lm(trust_media ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) +
+                         scale(PTV_SP) + scale(PTV_PVV) + scale(PTV_FVD) +scale(PTV_BBB) + scale(PTV_JA21),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_media_4)
+```
+
+```{r}
+# comparing models
+anova(model_trust_media_1, model_trust_media_2, model_trust_media_3, model_trust_media_4)
+```
+
+## Trust in Twitter
+
+```{r}
+# trust in twitter model
+model_trust_twitter_1 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_1)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_2 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_2)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_3 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_3)
+```
+
+```{r}
+# trust in twitter model
+model_trust_twitter_4 = lm(trust_twitter ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) +
+                         scale(PTV_SP) + scale(PTV_PVV) + scale(PTV_FVD) +scale(PTV_BBB) + scale(PTV_JA21),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_twitter_4)
+```
+
+```{r}
+anova(model_trust_twitter_1, model_trust_twitter_2, model_trust_twitter_3, model_trust_twitter_4)
+```
+
+## Trust differential
+
+```{r}
+# trust in media model 1
+model_trust_differential_1 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_1)
+```
+
+```{r}
+# trust in media model 2
+model_trust_differential_2 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_2)
+```
+
+```{r}
+# trust in media model 3
+model_trust_differential_3 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_3)
+```
+
+```{r}
+# trust in media model 4
+model_trust_differential_4 = lm(trust_differential ~ 
+                         # structural model
+                         scale(age) + scale(edu_rec) + scale(woman) + scale(coping_income) +# add coping with income
+                         # media model
+                         scale(follow_news_tv) + scale(follow_news_newspapers) + scale(follow_news_internet) + scale(follow_news_socialmedia) +
+                         # psychological model
+                         scale(picom_index) +
+                         # political model
+                         scale(LR_rec) + scale(CP_rec) +
+                         scale(PTV_SP) + scale(PTV_PVV) + scale(PTV_FVD) +scale(PTV_BBB) + scale(PTV_JA21),
+                       data = df_analyses_3,
+                       weights = weight_trimmed_0.995endsurvey)
+
+summary(model_trust_differential_4)
+```
+
+```{r}
+# comparing models
+anova(model_trust_differential_1, model_trust_differential_2, model_trust_differential_3, model_trust_differential_4)
+```

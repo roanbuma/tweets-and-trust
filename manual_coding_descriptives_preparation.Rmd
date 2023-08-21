@@ -1,0 +1,125 @@
+---
+title: "Untitled"
+author: "Roan Buma"
+date: "2023-07-20"
+output: html_document
+---
+
+```{r}
+knitr::purl("manual_coding_descriptives_preparation.Rmd")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# packages
+library(tidyverse)
+library(readxl)
+
+# load data
+tweets = readRDS("data/expanded_tweets_full.rds")
+manual_coding = read_excel("data/coding sources.xlsx")
+```
+
+```{r}
+#
+table(manual_coding$domain_type) %>% sort(., decreasing = TRUE)
+```
+
+# data preparation
+
+```{r}
+# determine broader categories
+manual_coding = manual_coding %>%
+  mutate(domain_class = case_when(domain_type == "legacy" ~ "legacy media",
+                                  domain_type == "foreign" ~ "foreign media",
+                                  domain_type == "new media" ~ "new media",
+                                  domain_type == "social media" ~ "social media",
+                                  domain_type == "offline" ~ "other",
+                                  domain_type == "organisation" ~ "other",
+                                  domain_type == "other" ~ "other",
+                                  domain_type == "party" ~ "other",
+                                  domain_type == "state" ~ "other",
+                                  domain_type == "political initiative" ~ "other",
+                                  domain_type == "satire" ~ "other",
+                                  domain_type == "search engine" ~ "other",
+                                  domain_type == "twitter" ~ "twitter"
+                                  ))
+```
+
+```{r}
+# only select relevant codings
+manual_coding = manual_coding %>% select(url_domains, domain_class, n)
+```
+
+# descriptives
+
+```{r}
+# total url domains
+total_domains = manual_coding %>%
+  filter(!is.na(domain_class)) %>%
+  nrow()
+
+total_domains
+```
+```{r}
+# decriptives
+manual_coding %>%
+  group_by(domain_class) %>%
+  summarise(n = n()) %>%
+  mutate(perc = (n / total_domains * 100)%>%round(2)) %>%
+  filter(!is.na(domain_class)) %>%
+  filter(domain_class != "twitter")
+```
+```{r}
+# examples
+manual_coding %>%
+  filter(domain_class == "legacy media")
+```
+
+```{r}
+# examples
+manual_coding %>%
+  filter(domain_class == "new media")
+```
+
+```{r}
+manual_coding %>%
+  filter(domain_class == "social media")
+```
+
+```{r}
+manual_coding %>%
+  filter(domain_class == "foreign media")
+```
+
+```{r}
+manual_coding %>%
+  filter(domain_class == "other")
+```
+
+
+
+coverage
+```{r}
+# twitter.com + t.co
+twitter_urls = 151379 + 6871
+
+# total
+total_urls = 244314
+
+twitter_urls / total_urls * 100
+```
+
+```{r}
+manual_coding = manual_coding %>%
+  # remove n
+  select(url_domains, domain_class) %>%
+  # remove NAs
+  filter(!is.na(domain_class))
+
+saveRDS(manual_coding, "data/manual_coding_prepared.rds")
+```
+

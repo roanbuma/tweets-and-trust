@@ -1,0 +1,105 @@
+---
+title: "MBFC_descriptives"
+author: "Roan Buma"
+date: "2023-07-26"
+output: html_document
+---
+
+```{r}
+knitr::purl("MBFC_descriptives_preparation_thesis.Rmd")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# import data
+
+```{r}
+# packages
+library(tidyverse)
+library(readxl)
+
+# data
+MBFC = readRDS("mbfc/mbfc_full_prepared.rds")
+```
+# preparation
+
+```{r}
+MBFC %>%
+  group_by(media_type) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+# dutch domains
+MBFC %>%
+  filter(str_detect(source, "\\.nl$"))
+
+nrow(MBFC)
+```
+
+
+```{r}
+# remove Dutch domains 
+MBFC = MBFC %>%
+  filter(!str_detect(source, "\\.nl$")) %>% # 8 domains
+  filter(!str_detect(source, "\\.be$")) # 3 domains
+
+nrow(MBFC)
+```
+
+
+```{r}
+# create broader categories
+MBFC = MBFC %>%
+  mutate(media_type_group = case_when(str_detect(media_type, "news") ~ "legacy media",
+                                      str_detect(media_type, "tv") ~ "legacy media",
+                                      str_detect(media_type, "magazine") ~ "legacy media",
+                                      str_detect(media_type, "radio") ~ "legacy media",
+                                      str_detect(media_type, "journal") ~ "legacy media",
+                                      str_detect(media_type, "website") ~ "new media",
+                                      is.na(media_type) ~ NA,
+                                      TRUE ~ "other")) 
+```
+
+```{r}
+# check broader categories
+MBFC %>%
+  group_by(media_type, media_type_group) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+
+
+
+
+
+# descriptives
+
+```{r}
+# n unique
+n_unique_mbfc = MBFC %>%
+  filter(!is.na(media_type_group)) %>% 
+  nrow()
+
+n_unique_mbfc
+```
+
+```{r}
+MBFC %>%
+  group_by(media_type_group) %>%
+  summarise(n = n()) %>%
+  filter(!is.na(media_type_group)) %>%
+  mutate(perc = (n / n_unique_mbfc * 100)%>%round(2))
+```
+
+# export
+
+```{r}
+# save
+saveRDS(MBFC, "mbfc/mbfc_full_prepared_thesis.rds")
+```
+
