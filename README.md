@@ -34,3 +34,6 @@ STEP 3: Preparing MBFC Data Study 2 Dutch (n = 8) and Belgian (n = 3) domains we
 **Analyses**
 
 tweets_analysis.Rmd is the main file for all analyses of study 1 public_analysis.Rmd is the main file for all analyses of study 2 Furthermore, some descriptive statistics were calculates with MBFC_descriptives_preparation_thesis.Rmd and manual_coding_descriptives_preparation.Rmd
+
+**Data**
+For reproduction, the data can be requested to the author (r.buma@student.vu.nl or alteratively roanbuma@live.nl).
