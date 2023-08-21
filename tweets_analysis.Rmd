@@ -1,0 +1,1668 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-04-04"
+---
+
+```{r}
+knitr::purl("tweets_analysis.Rmd")
+```
+
+```{r}
+# packages
+library(tidyverse)
+library(readxl)
+
+library("scales") # for plots
+library(viridis) # for plots
+library(lubridate) # dates in plots
+
+# load data
+tweets = readRDS("data/expanded_tweets_full.rds")
+```
+
+# Data Preparation
+
+```{r}
+# reduce length of URL in tweets
+tweets = tweets %>%
+  mutate(url_domains = url) %>%
+  mutate(url_domains = str_replace_all(url_domains, "(http|https)://", "")) %>% # remove http(s)
+  mutate(url_domains = str_replace_all(url_domains, "www([0-9]|)\\.", "")) %>% #remove www
+  mutate(url_domains = str_replace_all(url_domains, "(/\\S+)", "")) %>% # remove lagging slash and everything after domains
+  mutate(url_domains = str_replace_all(url_domains, "/", "")) %>% # remove remaining lagging slashes
+  mutate(url_domains = ifelse(url_domains == "NA", NA, url_domains)) %>% # replace NA with NA
+  mutate(url_domains = str_replace_all(url_domains, "( NA)|(NA)", "")) # replace other NA's with empty space
+```
+
+
+```{r}
+# tweets wider for tweet based analysis
+tweets_wider = tweets %>%
+  # put urls in list again for unnesting into multiple columns
+  mutate(url_domains = str_split(url_domains, ' ')) %>%
+  # unnest into multiple columns
+  unnest_wider(url_domains, names_sep = "_", strict = T)
+```
+
+
+```{r}
+# tweets longer for URL based analysis
+tweets_longer = tweets %>%
+  # put urls in list again for unnesting into multiple columns
+  mutate(url_domains = str_split(url_domains, ' ')) %>%
+  # unnest into multiple rows
+  unnest_longer(url_domains)
+```
+
+# Description of Tweets
+
+```{r}
+# how many tweets?
+tweets %>% nrow()
+```
+
+```{r}
+# how many representatives?
+tweets %>% group_by(author_id) %>% summarise(n())
+```
+
+
+```{r}
+# how many parties or groups?
+tweets %>% group_by(Afkorting) %>% summarise(n()) %>% nrow()
+```
+
+```{r}
+# period
+min(tweets$created_at)
+max(tweets$created_at)
+```
+```{r}
+#colnames
+colnames(tweets)
+```
+
+```{r}
+n_tweets = nrow(tweets)
+n_urls = tweets_longer %>% filter(!is.na(url_domains)) %>% nrow()
+n_urls_without_twitter = tweets_longer %>% 
+  filter(!is.na(url_domains)) %>% 
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  nrow()
+n_legislators = tweets_longer %>% group_by(author_id) %>% summarise(n()) %>% nrow()
+n_domains = length(sort(table(tweets_longer$url_domains), decreasing = T))
+```
+
+A total of `r n_tweets` by `r n_legislators` contained `r n_urls`, with `r n_domains` unique domains.
+
+# Exporting URL domains to manually code
+
+```{r eval=FALSE}
+perc_urls = tweets_longer %>%
+  group_by(url_domains) %>%
+  count() %>%
+  mutate(perc = (n / n_urls) * 100)
+
+perc_urls %>%
+  filter(n >= 10) %>%
+  arrange(desc(perc)) %>% nrow()
+```
+
+```{r eval=FALSE}
+# number of URLs selected with n => 10 
+n_urls_selected = perc_urls %>%
+  filter(n >= 10) %>%
+  arrange(desc(perc)) %>%
+  filter(!is.na(url_domains)) %>% # remove NA
+  pull(n) %>%
+  sum()
+  
+n_urls_selected / n_urls * 100
+```
+
+```{r eval=FALSE}
+# number of URLs selected with n => 10  WITHOUT twitter.com AND t.co
+n_urls_selected_without_twitter = perc_urls %>%
+  filter(n >= 10) %>%
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  filter(!is.na(url_domains)) %>% # remove NA
+  arrange(desc(perc)) %>%
+  pull(n) %>%
+  sum()
+
+n_urls_selected_without_twitter / n_urls_without_twitter * 100
+```
+
+486 URLs have to be coded to cover 90.4% of the URLs tweeted in the data (when excluding "twitter.com" and "t.co")
+
+```{r eval=FALSE}
+# load MBFC labels
+mbfc = readRDS("mbfc/mbfc_full_prepared_thesis.rds")
+
+mbfc = mbfc %>%
+  select(source, category)
+
+# merge with mbfc
+urls_to_code = perc_urls %>%
+  #filter(n >= 10) %>%
+  arrange(desc(n)) %>%
+  filter(!is.na(url_domains)) %>%
+  filter(url_domains != "")%>%
+  left_join(mbfc, by=c("url_domains"="source"))
+
+# export list of URLS to code them
+# write.csv(urls_to_code, "code_urls.csv")
+```
+
+# MBFC Preparation
+
+## import data
+
+```{r}
+# load MBFC labels
+mbfc = readRDS("mbfc/mbfc_full_prepared_thesis.rds")
+```
+
+## data preparation 
+
+```{r}
+# applying mbfc to tweets
+tweets_longer_mbfc = tweets_longer %>%
+  left_join(mbfc, by = c("url_domains"="source"))
+```
+
+# MBFC categories analysis
+
+```{r}
+# URLs per category per party
+n_party_category = tweets_longer_mbfc %>%
+  filter(!is.na(category)) %>%
+  group_by(Afkorting, category) %>%
+  summarise(n = n())
+
+#n_party_category
+```
+
+```{r}
+# number of conspiracy-pseudoscience and questionable
+n_conspiracy_pseudoscience = tweets_longer_mbfc %>%
+  filter(category == "conspiracy-pseudoscience"|category == "questionable source") %>%
+  group_by(Afkorting) %>%
+  summarise(n_misinfo = n())
+
+#n_conspiracy_pseudoscience
+
+n_tweets_total_per_party = tweets %>%
+  group_by(Afkorting) %>%
+  summarise(n_tweets = n())
+
+#n_tweets_total_per_party
+
+parties_misinfo_stats = n_tweets_total_per_party %>%
+  left_join(n_conspiracy_pseudoscience) %>%
+  # replace NA's with 0s
+  mutate(n_misinfo = ifelse(is.na(n_misinfo), 0, n_misinfo)) %>%
+  mutate(p_misinfo = (n_misinfo / n_tweets * 100) %>%round(2))
+
+parties_misinfo_stats
+```
+
+```{r}
+ggplot(parties_misinfo_stats, aes(y=reorder(Afkorting,p_misinfo), x=p_misinfo)) +
+  geom_col() +
+  theme_bw() +
+  labs(title = "Percentage of tweets per party containing unreliable sources",
+       y="Party")
+
+# change labels
+```
+
+```{r}
+ggplot(parties_misinfo_stats, aes(y=reorder(Afkorting,n_misinfo), x=n_misinfo)) +
+  geom_col() +
+  theme_bw() +
+  labs(x = "Number of tweets containing questionable / conspiracy-pseudoscience sources",
+       y="Party")
+```
+
+
+```{r}
+# total number of tweets per party
+ggplot(parties_misinfo_stats, aes(y=reorder(Afkorting,n_tweets), x=n_tweets)) +
+  geom_col() +
+  theme_bw() +
+  scale_x_continuous(labels = comma) +
+  labs(x = "Total tweets",
+       y="Party")
+```
+
+```{r}
+# number of URLs per category
+tweets_longer_mbfc %>%
+  filter(!is.na(category)) %>%
+  group_by(category) %>%
+  summarise(n = n())
+```
+
+
+```{r}
+# most shared unreliable URLs
+tweets_longer_mbfc %>%
+  filter(category == "questionable source"|category=="conspiracy-pseudoscience") %>% 
+  group_by(url_domains) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+# MBFC Media Type Analysis
+
+```{r}
+tweets_longer_mbfc %>%
+  group_by(Afkorting, media_type_group) %>%
+  summarise(n())
+```
+
+## coverage
+
+```{r}
+mbfc_n_covered = tweets_longer_mbfc %>% 
+  filter(!is.na(url_domains)) %>%
+  filter(!is.na(media_type_group)) %>%
+  nrow()
+
+mbfc_n_covered_unique = tweets_longer_mbfc %>% 
+  filter(!is.na(url_domains)) %>%
+  filter(!is.na(media_type_group)) %>%
+  group_by(url_domains) %>%
+  summarise(n()) %>%
+  nrow()
+
+n_urls = tweets_longer_mbfc %>%
+  filter(!is.na(url_domains)) %>%
+  nrow()
+
+n_urls_without_twitter = tweets_longer_mbfc %>%
+  filter(url_domains != "t.co") %>%
+  filter(url_domains != "twitter.com") %>%
+  nrow()
+
+mbfc_n_covered / n_urls * 100
+
+mbfc_n_covered / n_urls_without_twitter * 100
+```
+
+coverage with twitter.com and t.co is 1.68%
+coverage without twitter.com and t.co is 4.76%
+
+## descriptives
+
+```{r}
+# n unique
+mbfc %>%
+  filter(!is.na(media_type_group)) %>%
+  nrow()
+```
+
+```{r}
+# n unique in data
+tweets_longer_mbfc %>%
+  filter(!is.na(media_type_group)) %>%
+  group_by(url_domains) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+
+```{r}
+# n unique in data
+tweets_longer_mbfc %>%
+  filter(!is.na(media_type_group)) %>%
+  group_by(url_domains) %>%
+  summarise(n = n()) %>%
+  nrow()
+```
+
+```{r}
+tweets_longer_mbfc %>%
+  group_by(media_type_group) %>%
+  summarise(n = n()) %>%
+  mutate(perc = (n / n_urls_without_twitter *100)%>%round(2)) %>%
+  filter(!is.na(media_type_group))
+```
+
+## common URL domains
+
+```{r}
+tweets_longer_mbfc %>%
+  filter(media_type_group == "new media") %>%
+  group_by(url_domains) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+
+## plots
+
+```{r}
+# preparation: factor and releveling factor domain_class for plots
+tweets_longer_mbfc$media_type_group = as_factor(tweets_longer_mbfc$media_type_group) %>%
+  fct_relevel("new media","social media","legacy media","other")
+
+# create var for order in plots
+mbfc_legacy_order = tweets_longer_mbfc %>%
+  # filter out unused
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(media_type_group != "other") %>%
+  # group
+  group_by(Afkorting, media_type_group) %>%
+  summarise(n()) %>%
+  # calculate percentage of legacy compared to legacy+social+foreign+new
+  pivot_wider(names_from = "media_type_group", values_from = "n()") %>%
+  replace_na(list(`new media` = 0)) %>%
+  #mutate(total = `new media` + `social media` + `legacy`) %>%
+  mutate(order = `legacy media` / `new media`) %>%
+  #mutate(order = `legacy media` / (`new media`+`twitter`+`foreign media`)) %>%
+  select(Afkorting,order)
+
+# define which parties to include in plots
+parties = c("PvdA","CU","Volt","D66","VVD","SP","CDA","DENK","PvdD","GL","BIJ1","BBB","SGP","JA21","PVV","FVD")
+```
+```{r}
+# plot parties
+tweets_longer_mbfc %>%
+  # remove tweets without URL
+  filter(!is.na(url_domains)) %>%
+  # remove tweets with twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove tweets with "other" category
+  filter(media_type_group != "other") %>%
+  # add order
+  left_join(mbfc_legacy_order) %>%
+  # plot
+  ggplot(aes(y = reorder(Afkorting, order), fill=media_type_group)) +
+  geom_bar(position="fill") +
+  labs(title = "Media Sharing Practices by Dutch MPs: MBFC Coding",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  scale_fill_manual(values=c("red","orange","green"))+
+  theme_minimal()
+```
+
+```{r}
+# plot parties (FOR PAPER)
+tweets_longer_mbfc %>%
+  # remove tweets without URL
+  filter(!is.na(url_domains)) %>%
+  # remove tweets with twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove tweets with "other" category
+  filter(media_type_group != "other") %>%
+  # add order
+  left_join(mbfc_legacy_order) %>%
+  # plot
+  ggplot(aes(y = reorder(Afkorting, order), fill=media_type_group)) +
+  geom_bar(position="fill") +
+  labs(#title = "Media Sharing Practices by Dutch MPs: MBFC Coding",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  scale_fill_manual(values=c("red","orange","green"))+
+  theme_minimal()
+
+#ggsave("plots/media_sharing_practices_mbfc.pdf", width = 6, height = 3)
+```
+
+
+# Manual Coding
+
+## import data
+
+```{r}
+# import
+manual_coding = readRDS("data/manual_coding_prepared.rds")
+```
+
+## application
+
+```{r}
+tweets_manual_coding = tweets_longer %>%
+  left_join(manual_coding, by = "url_domains")
+```
+
+```{r}
+tweets_manual_coding %>%
+  group_by(Afkorting, domain_class) %>%
+  summarise(n())
+```
+
+## coverage
+
+```{r}
+manual_n_covered = tweets_manual_coding %>% 
+  filter(!is.na(url_domains)) %>%
+  # remove empty
+  filter(!is.na(domain_class)) %>%
+  # remove foreign
+  filter(domain_class != "foreign media") %>%
+  nrow()
+
+manual_n_covered_unique = tweets_manual_coding %>% 
+  filter(!is.na(url_domains)) %>%
+  # remove empty
+  filter(!is.na(domain_class)) %>%
+  # remove foreign
+  filter(domain_class != "foreign media") %>%
+  group_by(url_domains) %>%
+  summarise(n()) %>%
+  nrow()
+
+n_urls = tweets_manual_coding %>%
+  filter(!is.na(url_domains)) %>%
+  nrow()
+
+n_urls_without_twitter = tweets_manual_coding %>%
+  filter(url_domains != "t.co") %>%
+  filter(url_domains != "twitter.com") %>%
+  nrow()
+
+manual_n_covered / n_urls * 100
+
+manual_n_covered / n_urls_without_twitter * 100
+```
+
+coverage with twitter.com and t.co is 29.77%
+coverage without twitter.com and t.co is 84.51%
+
+## descriptives
+
+```{r}
+tweets_manual_coding %>%
+  group_by(domain_class) %>%
+  summarise(n = n()) %>%
+  mutate(perc = (n / n_urls_without_twitter *100)%>%round(2)) %>%
+  filter(!is.na(domain_class))
+```
+
+## Plots
+
+```{r}
+# preparation: factor and releveling factor domain_class for plots
+tweets_manual_coding$domain_class = as_factor(tweets_manual_coding$domain_class)
+tweets_manual_coding$domain_class = fct_relevel(tweets_manual_coding$domain_class, "new media", "social media", "foreign media", "legacy media")
+
+# create var for order in plots
+manual_legacy_order = tweets_manual_coding %>%
+  # filter out unused
+  filter(!is.na(url_domains)) %>%
+  filter(domain_class != "twitter") %>%
+  filter(domain_class != "other") %>%
+  # group
+  group_by(Afkorting, domain_class) %>%
+  summarise(n()) %>%
+  # calculate percentage of legacy compared to legacy+social+foreign+new
+  pivot_wider(names_from = "domain_class", values_from = "n()") %>%
+  replace_na(list(`new media` = 0)) %>%
+  mutate(total = `new media` + `social media` + `foreign media` + `legacy media`) %>%
+  mutate(order = `legacy media` / `new media`) %>%
+  #mutate(order = `legacy media` / (`new media`+`twitter`+`foreign media`)) %>%
+  select(Afkorting,order)
+
+# define which parties to include in plots
+parties = c("PvdA","CU","Volt","D66","VVD","SP","CDA","DENK","PvdD","GL","BIJ1","BBB","SGP","JA21","PVV","FVD")
+```
+
+```{r}
+# plot parties
+tweets_manual_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(domain_class != "other") %>%
+  # add order
+  left_join(manual_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=domain_class)) +
+  geom_bar(position="fill") +
+  labs(title = "Media Sharing Practices by Dutch MPs: Manual Coding",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  scale_fill_manual(values=c("red","orange","yellow","green"))+
+  theme_minimal()
+```
+
+```{r}
+# plot parties
+tweets_manual_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(domain_class != "other") %>%
+  # add order
+  left_join(manual_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=domain_class)) +
+  geom_bar(position="fill") +
+  labs(#title = "Media Sharing Practices by Dutch MPs: Manual Coding",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Note: Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  scale_fill_manual(values=c("red","orange","yellow","green"))+
+  theme_minimal()
+
+#ggsave("plots/media_sharing_practices_manual_coding.pdf", width = 6, height = 3)
+```
+
+
+
+
+# Combining MBFC and manual
+
+## preparation
+
+```{r}
+# remove foreign from manual_coding
+manual_coding_base = manual_coding %>%
+  filter(domain_class != "foreign media")
+
+# remove NAs from mbfc
+mbfc_base = mbfc %>%
+  filter(!is.na(media_type_group)) %>%
+  select(source, media_type_group)
+
+# join to check for overlaps (should be no overlaps)
+mbfc_base %>%
+  left_join(manual_coding, by = c("source"="url_domains")) %>%
+  filter(!is.na(domain_class))
+
+# standardize both datasets
+manual_coding_base = manual_coding_base %>%
+  mutate(domain = url_domains) %>%
+  mutate(code = domain_class) %>%
+  mutate(code_source = "manual coding") %>%
+  select(domain, code, code_source)
+
+mbfc_base = mbfc_base %>%
+  mutate(domain = source) %>%
+  mutate(code = media_type_group) %>%
+  mutate(code_source = "mbfc coding") %>%
+  select(domain, code, code_source)
+```
+
+```{r}
+# inspect both
+nrow(manual_coding_base)
+nrow(mbfc_base)
+
+colnames(manual_coding_base)
+colnames(mbfc_base)
+```
+```{r}
+# combine them
+combined_codings = manual_coding_base %>% rbind(mbfc_base)
+```
+
+```{r}
+# inspect
+nrow(combined_codings)
+```
+```{r}
+combined_codings %>%
+  group_by(code, code_source) %>%
+  summarise(n())
+```
+
+
+## application
+
+```{r}
+tweets_combined_coding = tweets_longer %>%
+  left_join(combined_codings, by = c("url_domains" = "domain"))
+```
+
+## coverage
+
+```{r}
+combined_n_covered = tweets_combined_coding %>% 
+  filter(!is.na(code)) %>%
+  nrow()
+
+combined_n_covered_unique = tweets_combined_coding %>% 
+  filter(!is.na(code)) %>%
+  group_by(url_domains) %>%
+  summarise(n()) %>%
+  nrow()
+
+n_urls = tweets_combined_coding %>%
+  filter(!is.na(url_domains)) %>%
+  nrow()
+
+n_urls_without_twitter = tweets_combined_coding %>%
+  filter(url_domains != "t.co") %>%
+  filter(url_domains != "twitter.com") %>%
+  nrow()
+
+combined_n_covered / n_urls * 100
+
+combined_n_covered / n_urls_without_twitter * 100
+```
+
+coverage with twitter.com and t.co is 31.45%
+coverage without twitter.com and t.co is 89.28%
+
+## descriptives
+
+```{r}
+tweets_combined_coding %>%
+  group_by(code) %>%
+  summarise(n = n()) %>%
+  mutate(perc = (n / n_urls_without_twitter *100)%>%round(2)) %>%
+  filter(!is.na(code))
+```
+
+# Analysis
+
+Define populist parties
+
+```{r}
+populist_parties = c("BBB","FVD","JA21","PVV", "Groep Van Haga")
+
+populist_all = c("BBB","FVD","JA21","PVV", "Groep Van Haga","SP") # includes pop left
+```
+
+## Tweet volume
+
+```{r}
+tweets %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "populist", "non-populist"))
+  
+```
+
+## descriptives about URLs
+
+```{r}
+# check full data
+table(tweets_combined_coding$code, useNA="ifany")
+
+# create data with only coded data
+coded_media_urls = tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(!is.na(code))
+
+table(coded_media_urls$code, useNA = "ifany")
+
+# create data without NAs and without twitter
+total_media_urls = tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co")
+
+table(total_media_urls$code, useNA = "ifany")
+
+# how many URLs? (without twitter and t.co)
+n_urls_without_twitter = nrow(total_media_urls)
+
+# how many URLs coded?
+n_urls_coded_legacy_social_alternative = nrow(coded_media_urls)
+
+# percentage of URLs coded as legacy media, social media or alternative media (excluding twitter)?
+perc_covered_coding_only = (n_urls_coded_legacy_social_alternative / n_urls_without_twitter * 100) %>% round(2)
+
+perc_covered_coding_only
+```
+
+
+
+## Temporal Trends 
+
+```{r}
+n_days = as.numeric(ymd(substr(max(tweets$created_at),0,10))-ymd(substr(min(tweets$created_at),0,10)))
+
+# daily average of tweets
+nrow(tweets) / n_days
+
+# daily average of URLs
+n_urls_without_twitter / n_days
+```
+
+257 tweets per day
+38 URLs per day (Excl twitter)
+
+
+
+```{r}
+tweets_q_mean = tweets %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "populist", "non-populist")) %>%
+  # fix time
+  mutate(time = substr(created_at, 0, 10)) %>%
+  # create quarter var
+  mutate(quarter = paste0(year(time),"/",quarter(time))) %>%
+  # group by quarter, author and populist and summarise n
+  group_by(quarter, author_id, populist) %>%
+  summarise(n = n()) %>%
+  # average per quarter per legislator type
+  group_by(quarter, populist) %>%
+  summarise(q_mean_n = mean(n))
+
+tweets_q_mean %>%
+  ggplot(aes(x = quarter, y = q_mean_n, fill=populist)) +
+  geom_col(position="dodge") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+tweets_y_mean = tweets %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_all, "populist", "non-populist")) %>%
+  # fix time
+  mutate(time = substr(created_at, 0, 10)) %>%
+  # create quarter var
+  mutate(year = year(time)) %>%
+  # group by quarter, author and populist and summarise n
+  group_by(year, author_id, populist) %>%
+  summarise(n = n()) %>%
+  # average per quarter per legislator type
+  group_by(year, populist) %>%
+  summarise(y_mean_n = mean(n))
+
+tweets_y_mean %>%
+  ggplot(aes(x = year, y = y_mean_n, fill=populist)) +
+  geom_col(position="dodge") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+t.test(q_mean_n ~ populist, data = tweets_q_mean)
+```
+
+
+```{r}
+tweets_q_mean = tweets %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_all, "populist", "non-populist")) %>%
+  # fix time
+  mutate(time = substr(created_at, 0, 10)) %>%
+  # create quarter var
+  mutate(quarter = paste0(year(time),"/",quarter(time))) %>%
+  # group by quarter, author and populist and summarise n
+  group_by(quarter, author_id, populist) %>%
+  summarise(n = n()) %>%
+  # average per quarter per legislator type
+  group_by(quarter, populist) %>%
+  summarise(q_mean_n = mean(n))
+
+tweets_q_mean %>%
+  ggplot(aes(x = quarter, y = q_mean_n, fill=populist)) +
+  geom_col(position="dodge") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+```{r}
+tweets_q_mean = tweets %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_all, "populist", "non-populist")) %>%
+  # filter
+  filter(populist == "populist") %>%
+  # fix time
+  mutate(time = substr(created_at, 0, 10)) %>%
+  # create quarter var
+  mutate(quarter = paste0(year(time),"/",quarter(time))) %>%
+  # group by quarter, author and populist and summarise n
+  group_by(quarter, author_id, Afkorting) %>%
+  summarise(n = n()) %>%
+  # average per quarter per legislator type
+  group_by(quarter, Afkorting) %>%
+  summarise(q_mean_n = mean(n))
+
+tweets_q_mean %>%
+  ggplot(aes(x = quarter, y = q_mean_n, fill=Afkorting)) +
+  geom_col(position="dodge") +
+  theme_bw() +
+  
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+
+
+```{r}
+# average tweets over time
+tweets %>%
+  # fix time
+  mutate(time = ymd(substr(created_at, 0, 10))) %>%
+  group_by(time) %>%
+  summarise(n = n()) %>%
+  # plot
+  ggplot(aes(x = time, y=n)) +
+  geom_line()+
+  # geom_histogram(binwidth = 7) +
+  theme_bw()+
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "average tweets over time", x = "Year",y="N")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  theme_bw()
+```
+
+```{r}
+
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code !="other") %>%
+  # remove no coding
+  filter(!is.na(code)) %>%
+  # fix time
+  mutate(time = ymd(substr(created_at, 0, 10))) %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "populist", "non-populist")) %>%
+  group_by(time) %>%
+  summarise(n = n()) %>%
+  # plot
+  ggplot(aes(x = time, y=n)) +
+  geom_line()+
+  # geom_histogram(binwidth = 7) +
+  theme_bw()+
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  labs(title = "average URLs over time", x = "Year",y="N")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+
+
+
+
+
+```{r}
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code !="other") %>%
+  # remove no coding
+  filter(!is.na(code)) %>%
+  # fix time
+  mutate(time = ymd(substr(created_at, 0, 10))) %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "Right-Wing Populist", "Other Parties")) %>%
+  # recode media type
+  mutate(code = as_factor(code) %>% fct_relevel("legacy media", "social media", "new media")) %>%
+  # plot
+  ggplot(aes(x = time, fill=code)) +
+  geom_histogram(position = "fill", binwidth = 365) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_fill_viridis(option="F",
+                     discrete=TRUE,
+                     direction = -1,
+                     labels=c("Legacy","Social","Alternative")) +
+  theme_bw()+
+  labs(x = "Year",
+       y="Proportion",
+       fill = "Media Type")+
+  facet_grid(~populist) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggsave("plots/pop_v_other_hist_time.pdf", width = 6, height = 3)
+```
+
+Testing this
+
+```{r}
+# time_test.prep = tweets_combined_coding %>%
+#   # remove NA
+#   filter(!is.na(url_domains)) %>%
+#   # remove twitter
+#   filter(url_domains != "twitter.com") %>%
+#   filter(url_domains != "t.co") %>%
+#   # remove other
+#   filter(code !="other") %>%
+#   # remove no coding
+#   filter(!is.na(code)) %>%
+#   # fix time
+#   #mutate(time = ymd(substr(created_at, 0, 10))) %>%
+#   mutate(year = as.numeric(substr(created_at, 0,4))) %>%
+#   # add populist label
+#   mutate(populist = ifelse(Afkorting %in% populist_parties, "Right-Wing Populist", "Other Parties")) %>%
+#   # recode media type
+#   mutate(code = as_factor(code) %>% fct_relevel("legacy media", "social media", "new media")) 
+# 
+# time_test.total = time_test.prep %>%
+#   group_by(year, populist) %>%
+#   summarise(n_total_year = n())
+# 
+# time_test.specific = time_test.prep %>%
+#   group_by(year, populist, code) %>%
+#   summarise(n_specific = n())
+# 
+# time_test.combined = time_test.specific %>%
+#   left_join(time_test.total, by = join_by(year, populist)) %>%
+#   mutate(prop = n_specific / n_total_year) %>%
+#   select(-c(n_specific, n_total_year))
+# 
+# time_test.combined %>%
+#   ggplot(aes(x = year, y = prop, color = code)) +
+#   geom_line(size=2) +
+#   scale_color_viridis(option="F",
+#                      discrete=TRUE,
+#                      direction = -1,
+#                      labels=c("Legacy","Social","Alternative")) +
+#   scale_x_continuous(breaks = c(2017, 2018, 2019, 2020, 2021, 2022, 2023))+
+#   scale_y_continuous(breaks=c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1), limits = c(0,1))+
+#   facet_grid(~populist) +
+#   theme_bw() +
+#   labs(x = "Year",
+#        y="Proportion",
+#        color = "Media Type")
+
+```
+
+
+
+```{r}
+# DATA PREPARATION 
+
+time_test.prep = tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code !="other") %>%
+  # remove no coding
+  filter(!is.na(code)) %>%
+  # fix time
+  mutate(time = ym(substr(created_at, 0, 7))) %>%
+  #mutate(time = substr(created_at, 0, 7)) %>%
+  #mutate(year = as.numeric(substr(created_at, 0,4))) %>%
+  # add populist label
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "Right-Wing Populist", "Other Parties")) %>%
+  # recode media type
+  mutate(code = as_factor(code) %>% fct_relevel("legacy media", "social media", "new media")) 
+
+# totals and specifics per month
+time_test.total = time_test.prep %>%
+  group_by(time, populist) %>%
+  summarise(n_total = n())
+
+time_test.specific = time_test.prep %>%
+  group_by(time, populist, code) %>%
+  summarise(n_specific = n())
+
+time_test.combined = time_test.specific %>%
+  left_join(time_test.total, by = join_by(time, populist)) %>%
+  mutate(prop = n_specific / n_total) %>%
+  select(-c(n_specific, n_total))
+
+# test outcomes dataframe
+time_test.labels = data.frame(x=ym("2020-01"),
+                             y=.4,
+                             lab=c("tau = 0.457***",# p < .001",
+                                   "tau = -0.494***",# p < .001",
+                                   "tau = -0.339***",# p < .001",
+                                   "tau = -0.101",# p = 0.204",
+                                   "tau = -0.151",# p = 0.056",
+                                   "tau = 0.165*"),# p = 0.036"),
+                             populist=c("Other Parties",
+                                        "Other Parties",
+                                        "Other Parties",
+                                        "Right-Wing Populist",
+                                        "Right-Wing Populist",
+                                        "Right-Wing Populist"),
+                             code = c("Legacy Media",
+                                      "Alternative Media",
+                                      "Social Media",
+                                      "Legacy Media",
+                                      "Alternative Media",
+                                      "Social Media"))
+```
+
+
+```{r}
+# trends in one plot
+time_test.combined %>%
+  ggplot(aes(x = time, y = prop, color = code)) +
+  geom_line(size=1) +
+  scale_color_viridis(option="D",
+                     discrete=TRUE,
+                     direction = -1,
+                     labels=c("Legacy","Social","Alternative")) +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_y_continuous(breaks=c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1), limits = c(0,1))+
+  facet_grid(~populist) +
+  theme_bw() +
+  labs(x = "Year",
+       y="Proportion",
+       color = "Media Type")
+
+ggsave("plots/pop_v_other_timeline_grid_2.pdf", width = 6, height = 3)
+```
+
+```{r}
+# trends in plot with 6 facets + tests
+time_test.combined %>%
+  # change names
+  mutate(code = as_factor(case_when(code == "legacy media" ~ "Legacy Media",
+                          code == "social media" ~ "Social Media",
+                          code == "new media" ~ "Alternative Media"))) %>%
+  ggplot(aes(x = time, y = prop)) +
+  geom_smooth(method="lm", color = "#CB1B4F")+
+  geom_line() +
+  scale_x_date(date_breaks = "1 year", date_labels = "%Y") +
+  scale_y_continuous(breaks=c(0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1), limits = c(0,1))+
+  facet_grid(factor(populist) ~ factor(code)) +
+  geom_label(aes(x,y,label = lab),
+             data=time_test.labels,
+             size=3,
+             color = "#CB1B4F")+
+  theme_bw() +
+  labs(x = "Year",
+       y="Proportion",
+       color = "Media Type",
+       caption = "*p<0.05; **p<.01; ***p<.001") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+ggsave("plots/pop_v_other_timeline_grid_6_test.pdf", width = 6, height = 4)
+```
+
+
+```{r}
+library(Kendall)
+```
+
+
+Populists
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Right-Wing Populist") %>%
+  filter(code == "legacy media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Right-Wing Populist") %>%
+  filter(code == "social media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Right-Wing Populist") %>%
+  filter(code == "new media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+Other parties
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Other Parties") %>%
+  filter(code == "legacy media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Other Parties") %>%
+  filter(code == "social media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+
+```{r}
+time_test.combined %>%
+  filter(populist == "Other Parties") %>%
+  filter(code == "new media") %>%
+  pull(prop) %>%
+  MannKendall()
+```
+
+
+## PROPORTIONS OF SHARED LEGACY MEDIA, NEW MEDIA AND SOCIAL MEDIA URLS OVER TIME
+
+## table 
+
+```{r}
+sharing_habits_totals = tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  group_by(Afkorting) %>%
+  summarise(total_n = n())
+
+sharing_habits_per_type = tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  group_by(Afkorting, code) %>%
+  summarise(n = n()) %>%
+  # add totals
+  left_join(sharing_habits_totals) %>%
+  # percentages
+  mutate(perc = (n / total_n * 100)%>%round(2))
+```
+
+
+```{r}
+sharing_habits_totals %>% arrange(desc(total_n))
+```
+
+
+```{r}
+# display percentages
+sharing_habits_per_type %>%
+  select(-c(n,total_n)) %>%
+  pivot_wider(names_from = code, values_from = perc) %>%
+  mutate(new_legacy_sum = `new media`+`social media`) %>%
+  arrange(desc(new_legacy_sum))
+```
+
+FVD has highest combined 
+
+## Plots
+
+```{r}
+# preparation: factor and releveling factor code for plots
+tweets_combined_coding$code = as_factor(tweets_combined_coding$code) %>%
+  fct_relevel("new media", "social media", "legacy media")
+
+# create var for order in plots
+combined_legacy_order = tweets_combined_coding %>%
+  # filter out unused
+  filter(!is.na(url_domains)) %>%
+  filter(code != "other") %>%
+  # group
+  group_by(Afkorting, code) %>%
+  summarise(n()) %>%
+  # calculate percentage of legacy compared to legacy+social+foreign+new
+  pivot_wider(names_from = "code", values_from = "n()") %>%
+  #replace_na(list(`new media` = 0)) %>%
+  #mutate(total = `new media` + `social media` + `foreign media` + `legacy media`) %>%
+  mutate(order = `legacy media` / `new media`) %>%
+  #mutate(order = `legacy media` / (`new media`+`twitter`+`foreign media`)) %>%
+  select(Afkorting,order)
+
+# define which parties to include in plots
+#parties = c("PvdA","CU","Volt","D66","VVD","SP","CDA","DENK","PvdD","GL","BIJ1","BBB","SGP","JA21","PVV","FVD","Groep Van Haga")
+
+# parties populist
+populists = c("PVV","FVD","JA21","BBB","Groep Van Haga")
+```
+
+```{r}
+# plot parties
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  # add order
+  left_join(combined_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=code)) +
+  geom_bar(position="fill") +
+  labs(title = "Media Sharing Practices by Dutch MPs",
+       subtitle = "Manual Codings (n = 336) for Dutch sources and MBFC (n = 4,883) for foreign sources\nCovers 89.28% of URLs shared by MPs\n'other' media type excluded",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  scale_fill_manual(values=c("red","yellow","green"))+
+  theme_minimal()
+```
+
+```{r}
+# plot parties for paper
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  # add order
+  left_join(combined_legacy_order) %>%
+  # remove gundogan (less than 100 shared URLs)
+  filter(Afkorting != "Gündoğan") %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=code)) +
+  geom_bar(position="fill") +
+  labs(#title = "Media Sharing Practices by Dutch MPs",
+       #subtitle = "Manual Codings (n = 336) for Dutch sources and MBFC (n = 4,883) for foreign sources\nCovers 89.28% of URLs shared by MPs",
+       x = "Proportion",
+       fill = "Media Type",
+       #caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  #scale_fill_manual(values=c("red","yellow","green"))+
+  scale_fill_viridis(option="F",
+                     discrete=TRUE,
+                     labels=c("Alternative","Social","Legacy"),
+                     guide = guide_legend(reverse=TRUE)) +
+  theme_minimal()
+
+ggsave("plots/media_sharing_practices_combined_coding.pdf", width = 6, height = 3)
+```
+
+```{r}
+# plot parties only populist
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  # filter only relevant parties
+  filter(Afkorting %in% populist_parties) %>%
+  # add order
+  left_join(combined_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=code)) +
+  geom_bar(position="fill") +
+  labs(title = "Media Sharing Practices by Dutch MPs from four populist parties",
+       subtitle = "Manual Codings (n = 336) for Dutch sources and MBFC (n = 4,883) for foreign sources\nCovers 89.28% of URLs shared by MPs\n'other' media type excluded",
+       x = "Proportion",
+       fill = "Media Type",
+       caption = "Parties are ordered by the ratio legacy media / new media",
+       y = "")+
+  #scale_fill_manual(values=c("red","yellow","green"))+
+  scale_fill_viridis(option="F",
+                     discrete=TRUE,
+                     labels=c("Alternative","Social","Legacy"),
+                     guide = guide_legend(reverse=TRUE)) +
+  theme_minimal()
+```
+
+```{r}
+# plot parties only populist (FOR PAPER)
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  # filter only relevant parties
+  filter(Afkorting %in% populist_parties) %>%
+  # add order
+  left_join(combined_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(Afkorting, order), fill=code)) +
+  geom_bar(position="fill") +
+  labs(x = "Proportion",
+       fill = "Media Type",
+       y = "")+
+  scale_fill_viridis(option="F",
+                     discrete=TRUE,
+                     labels=c("Alternative","Social","Legacy"),
+                     guide = guide_legend(reverse=TRUE)) +
+  theme_minimal()
+
+ggsave("plots/media_sharing_practices_combined_coding_populists.pdf", width = 6, height = 3)
+```
+
+
+```{r}
+# plot parties only populist (FOR PAPER)
+tweets_combined_coding %>%
+  # remove NA
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other") %>%
+  mutate(populist_v_other = case_when(Afkorting == "BBB" ~ "BBB",
+                                      Afkorting == "JA21" ~ "JA21",
+                                      Afkorting == "Groep Van Haga" ~ "Groep Van Haga",
+                                      Afkorting == "PVV" ~ "PVV",
+                                      Afkorting == "FVD" ~ "FVD",
+                                      TRUE ~ "Other Parties Average")) %>%
+  # add order
+  left_join(combined_legacy_order) %>%
+  # plots
+  ggplot(aes(y = reorder(populist_v_other, order), fill=code)) +
+  geom_bar(position="fill") +
+  labs(x = "Proportion",
+       fill = "Media Type",
+       y = "")+
+  scale_fill_viridis(option="F",
+                     discrete=TRUE,
+                     labels=c("Alternative","Social","Legacy"),
+                     guide = guide_legend(reverse=TRUE)) +
+  theme_minimal()
+
+ggsave("plots/media_sharing_practices_combined_coding_populists_v2.pdf", width = 6, height = 1.5)
+```
+
+## Formal Analysis
+
+
+```{r}
+tweets_combined_coding_analysis = tweets_combined_coding %>%
+  # only URL domains
+  filter(!is.na(url_domains)) %>%
+  # remove twitter
+  filter(url_domains != "twitter.com") %>%
+  filter(url_domains != "t.co") %>%
+  # remove other
+  filter(code != "other")
+```
+
+```{r}
+tweets_combined_coding_analysis = tweets_combined_coding_analysis %>%
+  mutate(populist = ifelse(Afkorting %in% populist_parties, "Right-Wing Populist", "Other Parties"))
+```
+
+
+```{r}
+# simple table
+table(tweets_combined_coding_analysis$populist, tweets_combined_coding_analysis$code)
+```
+
+
+```{r}
+# table with percentages per party type and media type
+tweets_combined_coding_analysis %>%
+  group_by(populist, code) %>%
+  summarise(n = n()) %>%
+  pivot_wider(names_from = code, values_from = n) %>%
+  mutate(total = `new media`+`social media`+`legacy media`) %>%
+  mutate(prop_new = (`new media` / total * 100)%>%round(2)) %>%
+  mutate(prop_social = (`social media` / total * 100)%>%round(2)) %>%
+  mutate(prop_legacy = (`legacy media` / total * 100)%>%round(2)) %>%
+  select(populist, prop_new, prop_social, prop_legacy) %>%
+  mutate(prop_new_social = prop_new + prop_social)
+```
+
+```{r}
+chisq.test(tweets_combined_coding_analysis$populist, tweets_combined_coding_analysis$code)
+```
+
+A chi-square test of independence was performed to examine the relation between party type and media sharing practices. The relation between these variables was significant, X2 (2, N = 57,056) = 
+
+```{r}
+tweets_combined_coding_analysis %>%
+  ggplot(aes(x = code, fill = code)) +
+  geom_bar() +
+  scale_fill_manual(values=c("red","yellow","green"))+
+  theme_bw() +
+  facet_grid(~populist)
+```
+
+```{r}
+df_plot_1 = tweets_combined_coding_analysis %>%
+  group_by(code,populist) %>%
+  summarise(n = n())
+
+df_plot_1_a = df_plot_1 %>%
+  mutate(n = -n)
+
+tweets_combined_coding_analysis %>%
+  ggplot(aes(x = populist, fill = code))+
+  geom_col(data = subset(df_plot_1,
+                         code %in% c("legacy media")),
+           aes(y = n)) +
+  geom_col(data = subset(df_plot_1_a,
+                         code %in% c("new media","social media")),
+           aes(y = n)) +
+  scale_fill_manual(values=c("green","red","yellow"))+
+  theme_bw()+
+  labs(x = "Party type",
+       y = "n",
+       fill="Media Type",
+       title="Differences in media sharing practices between populist and non-populist MPs",
+       subtitle = "Manual Codings (n = 336) for Dutch sources and MBFC (n = 4,883) for foreign sources\nCovers 89.28% of URLs shared by MPs\n'other' media type excluded")
+```
+
+```{r}
+tweets_combined_coding_analysis %>%
+  ggplot(aes(x = populist, fill = code))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("red","yellow","green"))+
+  theme_bw()+
+  labs(x = "Party type",
+       y = "Proportion",
+       fill="Media Type",
+       title="Differences in media sharing practices between populist and non-populist MPs",
+       subtitle = "Manual Codings (n = 336) for Dutch sources and MBFC (n = 4,883) for foreign sources\nCovers 89.28% of URLs shared by MPs\n'other' media type excluded")
+```
+
+## Robustness check: Comparing Party members with t-test
+
+```{r}
+# total tweets per legislator
+total_tweets_per_legislator = tweets_combined_coding_analysis %>%
+  group_by(twitter) %>%
+  summarise(total_n = n())
+
+# n and prop new media, social media and legacy media per legislator
+legislator_media_sharing_stats = tweets_combined_coding_analysis %>%
+  # summarise stats
+  group_by(twitter, Afkorting, code, populist) %>%
+  summarise(n = n()) %>%
+  # pivot wider
+  pivot_wider(names_from = code, values_from = n) %>%
+  # replace na with 0
+  replace_na(list(`new media` = 0, `social media` = 0, `legacy media` = 0)) %>%
+  left_join(total_tweets_per_legislator) %>%
+  mutate(perc_new = `new media` / total_n) %>%
+  mutate(perc_social = `social media` / total_n) %>%
+  mutate(perc_legacy = `legacy media` / total_n) %>%
+  mutate(perc_new_social = perc_new+perc_social) %>%
+  # EXCLUDE LEGISLATORS WITH LESS THAN 10 URLs
+  filter(total_n >= 10) # removes 7 legislators
+```
+
+```{r}
+legislator_media_sharing_stats %>%
+  group_by(populist) %>%
+  mutate(perc_new_social = perc_new + perc_social) %>%
+  summarise(mean_prop_new = mean(perc_new)%>%round(3),
+            sd_prop_new = sd(perc_new)%>%round(3),
+            mean_prop_social = mean(perc_social)%>%round(3),
+            sd_prop_social = sd(perc_social)%>%round(3),
+            mean_prop_legacy = mean(perc_legacy)%>%round(3),
+            sd_prop_legacy = sd(perc_legacy)%>%round(3),
+            mean_new_social = mean(perc_new_social)%>%round(3),
+            sd_new_social = sd(perc_new_social%>%round(3))) 
+```
+
+```{r}
+t.test(legislator_media_sharing_stats$perc_legacy)
+
+t.test(legislator_media_sharing_stats$perc_new)
+
+t.test(legislator_media_sharing_stats$perc_social)
+
+t.test(legislator_media_sharing_stats$perc_new_social)
+```
+
+## histogram plots
+
+```{r}
+# Combining New Media and Social Media in a single variable for plots
+legislator_media_sharing_stats = legislator_media_sharing_stats %>%
+  mutate(perc_new_social = perc_new + perc_social)
+```
+
+```{r}
+# separate dataframes for means in right-wing populist vs other parties
+df_boxplot_cut_pop = filter(legislator_media_sharing_stats, populist == "Right-Wing Populist")
+df_boxplot_cut_nonpop = filter(legislator_media_sharing_stats, populist == "Other Parties")
+```
+
+
+```{r}
+mean_pop = mean(df_boxplot_cut_pop$perc_new) %>% round(3)
+mean_nonpop = mean(df_boxplot_cut_nonpop$perc_new) %>% round(3)
+
+legislator_media_sharing_stats%>%
+  ggplot(aes(x=perc_new,
+             )) +
+  geom_histogram(alpha=.5)+
+  geom_vline(data = df_boxplot_cut_nonpop, 
+             aes(xintercept=mean_nonpop),
+             size=1)+
+  geom_vline(data = df_boxplot_cut_pop, 
+             aes(xintercept=mean_pop),
+             size=1)+
+  geom_text(data=df_boxplot_cut_nonpop,
+            aes(x=mean_nonpop+.1,
+                y=10),
+            label=paste("Mean = ", mean_nonpop))+
+  geom_text(data=df_boxplot_cut_pop,
+            aes(x=mean_pop+.1,
+                y=10),
+            label=paste("Mean = ", mean_pop))+
+  facet_grid(cols = vars(populist)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(x="% New Media URLs per Legislator",
+       y="N Legislators")
+```
+
+```{r}
+mean_pop = mean(df_boxplot_cut_pop$perc_social) %>% round(3)
+mean_nonpop = mean(df_boxplot_cut_nonpop$perc_social) %>% round(3)
+
+legislator_media_sharing_stats%>%
+  ggplot(aes(x=perc_social,
+             )) +
+  geom_histogram(alpha=.5)+
+  geom_vline(data = df_boxplot_cut_nonpop, 
+             aes(xintercept=mean_nonpop),
+             size=1)+
+  geom_vline(data = df_boxplot_cut_pop, 
+             aes(xintercept=mean_pop),
+             size=1)+
+  geom_text(data=df_boxplot_cut_nonpop,
+            aes(x=mean_nonpop+.1,
+                y=10),
+            label=paste("Mean = ", mean_nonpop))+
+  geom_text(data=df_boxplot_cut_pop,
+            aes(x=mean_pop+.1,
+                y=10),
+            label=paste("Mean = ", mean_pop))+
+  facet_grid(cols = vars(populist)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(x="% Social Media URLs per Legislator",
+       y="N Legislators")
+```
+
+
+
+```{r fig.width = 6, fig.height = 3}
+mean_pop = mean(df_boxplot_cut_pop$perc_new_social) %>% round(3)
+mean_nonpop = mean(df_boxplot_cut_nonpop$perc_new_social) %>% round(3)
+
+legislator_media_sharing_stats%>%
+  ggplot(aes(x=perc_new_social,
+             )) +
+  geom_histogram(fill = "#CB1B4F")+
+  geom_vline(data = df_boxplot_cut_nonpop, 
+             aes(xintercept=mean_nonpop),
+             size=1)+
+  geom_vline(data = df_boxplot_cut_pop, 
+             aes(xintercept=mean_pop),
+             size=1)+
+  geom_text(data=df_boxplot_cut_nonpop,
+            aes(x=mean_nonpop+.2,
+                y=8),
+            label=paste("Mean = ", mean_nonpop))+
+  geom_text(data=df_boxplot_cut_pop,
+            aes(x=mean_pop+.2,
+                y=8),
+            label=paste("Mean = ", mean_pop))+
+  facet_grid(cols = vars(populist)) +
+  theme_bw() +
+  theme(legend.position = "none") +
+  labs(x="Proportion of Alternative Media + Social Media URLs per Legislator",
+       y="N Legislators")
+
+ggsave("plots/pop_v_other_hist.pdf", width = 6, height = 3)
+```
+
+
+```{r}
+# n row legislators total
+tweets %>%
+  group_by(twitter) %>%
+  summarise(n()) %>%
+  nrow()
+
+# n row legislators in populist comparison
+nrow(legislator_media_sharing_stats)
+
+# per group
+legislator_media_sharing_stats %>%
+  group_by(populist) %>%
+  summarise(n())
+```
+

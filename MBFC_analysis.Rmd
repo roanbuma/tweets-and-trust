@@ -1,0 +1,74 @@
+---
+title: "mbfc analysis"
+output: html_document
+date: "2023-06-12"
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+```
+
+
+```{r}
+mbfc = readRDS("data/mbfc_full_prepared.rds")
+```
+
+```{r}
+mbfc %>%
+  group_by(media_type) %>%
+  summarize(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+mbfc_2 = mbfc %>%
+  # filter
+  filter(media_type == "website" | media_type == "newspaper" | media_type == "tv station" | media_type == "magazine" | media_type == "news agency" | media_type == "radio station") %>%
+  # define traditional legacy
+  mutate(traditional_legacy = case_when(
+    media_type == "website" ~ "new media",
+    media_type == "newspaper" ~ "traditional legacy",
+    media_type == "tv station" ~ "traditional legacy",
+    media_type == "magazine" ~ "traditional legacy",
+    media_type == "news agency" ~ "traditional legacy",
+    media_type == "radio station" ~ "traditional legacy",
+    TRUE ~ "other"
+  )) %>%
+  # define misinfo 
+  mutate(misinfo = case_when(
+    category == "left bias" ~ "info",
+    category == "left-center bias" ~ "info",
+    category == "least biased" ~ "info",
+    category == "right-center bias" ~ "info",
+    category == "right bias" ~ "info",
+    category == "pro-science" ~ "info",
+    category == "satire" ~ "info",
+    category == "conspiracy-pseudoscience" ~ "misinfo",
+    category == "questionable source" ~ "misinfo",
+    TRUE ~ "other"
+  ))
+
+mbfc_2 %>%
+  group_by(misinfo, traditional_legacy) %>%
+  tally() %>%
+  spread(misinfo, n) %>%
+  mutate(total = info+misinfo) %>%
+  mutate(info_perc = (info/total*100)%>%round(2)) %>%
+  mutate(misinfo_perc = (misinfo/total)%>%round(2)) %>%
+  select(traditional_legacy, info, info_perc, misinfo, misinfo_perc, total)
+```
+
+```{r}
+mbfc_2 %>%
+  filter(traditional_legacy == "traditional legacy" & misinfo == "misinfo") %>%
+  group_by(country) %>%
+  tally()
+```
+
+```{r}
+mbfc_3 = mbfc_2 %>%
+  filter(traditional_legacy == "traditional legacy" & misinfo == "misinfo") %>%
+  filter(country == "usa")
+```
+
