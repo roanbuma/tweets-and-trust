@@ -17,7 +17,7 @@ STEP 4: Expanding URLs (time-consuming). URLs from each Tweets were extracted an
 
 STEP 1: Compiling a list of most-shared URL domains. R script: tweets_analysis.R. R script uses data file expanded_tweets_full.rds. R script creates data file code_urls.csv.
 
-STEP 2: Manually coding URLs. URLs were manually coded in Microsoft Excel. Excel uses data file code_urls.csv. Excel saves data file code_urls.csv.
+STEP 2: Manually coding URLs. URLs were manually coded in Microsoft Excel. Excel uses data file code_urls.csv. Excel saves data file "coding sources.xlsx".
 
 STEP 3: Preparing manual coding, descriptives of manual codings. R script: manual_coding_descriptives_preparation.R. R script uses data files expanded_tweets_full.rds and code_urls.csv. R script saves data file manual_coding_prepared.rds.
 
