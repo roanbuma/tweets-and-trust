@@ -1,0 +1,157 @@
+---
+title: "MBFC refine"
+output: html_document
+date: "2022-12-15"
+---
+
+```{r}
+knitr::purl("MBFC_refine.Rmd")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+#read mbfc
+mbfc = readRDS("mbfc_full_prepared.rds")
+```
+
+
+```{r}
+#unique(mbfc$category) 
+# 9 labels, we use the labels of "questionable source" and "conspiracy"
+
+mbfc %>%
+  filter(as.character(category) %in% c("questionable source", 
+                                       "conspiracy-pseudoscience"))  %>%
+  group_by(category) %>%
+  summarise(n = n())  #1386 questionable + 443 conspiracy
+
+questionable_url <- mbfc %>%
+  filter(as.character(category) %in% c("questionable source", 
+                                       "conspiracy-pseudoscience"))
+```
+
+
+```{r}
+# find potential party websites
+demorgop <- questionable_url %>%
+  mutate(demgop = ifelse(str_detect(source, "democ|gop|repub"), 1, 0)) %>%
+  filter(demgop == 1)
+#filter out reasons with "conspiracy" or "pseudoscience"
+
+demorgop %>% 
+  mutate(conpseudo = ifelse(str_detect(reasoning, "conspir|pseudos"), 1, 0)) %>%
+  filter(conpseudo == 0)  %>%
+  select(source) %>%
+  as.list()  ### 9 sources. 
+#	tamparepublic.com (The Tampa Republic is a conservative news and opinion website, UK) republicworld.com( Indian News TV channel based in Mumbai, India.)
+# winningdemocrats.com (no longer online) 
+# middleamericandemocrat.com ( hyper-partisan liberal news and opinion websit,failed check ) 
+# democraticmoms.com (Democratic Moms is an extreme left wing news and opinion website/blog. Most articles utilize sensational headlines that are always one sided in content. some fake news )
+
+# party websites
+demorgop_list  <- c("gop.gov", "democrats.org", "gop.com")
+```
+
+
+```{r}
+#no conspiracy, but partisan biased and maybe false claim or failed fact check, mainly transparency and propaganda
+#For these partisan website, unless the reasons include " conspiracy" and "pseudoscience", we filter out them out as mild questionable source
+#given partisan websites are ideological biased and might fail fact-check due to unprofessional news release procedure
+#but they do not intentionally spread disinformation or misinformation. 
+
+#Similarly, if the reasons include "conspiracy" or " pseudos", then they are questionable. 
+#Further, filter out reasoning with only transparency, censorship, ideological bias. 
+propaganda <- questionable_url %>%
+  mutate(propaganda = ifelse(str_detect(reasoning, "prop|censor|trans"), 1, 0)) %>%
+  filter(propaganda == 1) %>%
+  mutate(conpseudo = ifelse(str_detect(reasoning, "conspiracy|pseudos"), 1, 0)) %>%
+  filter(conpseudo == 0 ) #802
+
+proganda_reasoning <- as_tibble(unique(unlist(str_split(propaganda$reasoning,", ")))) #79
+transparency_list <- c("transparency","propaganda","censorship","sourcing","sources","plagiarism","imposter","sensationalism","left","right","zionism",
+                       "lack of disclosure","pro-syrian state","white nationalism","marketing scam","satire without labeling",
+                       "failure to disclose satire", "violence", "clickbait", "graphic videos")
+
+mild_question <- proganda_reasoning %>%
+  filter(str_detect(value, paste(transparency_list , collapse="|"))) %>%
+  filter(!value %in% c("anti-immigration propaganda","antisemitic propaganda"))  ###we include reasons for hate group. 46
+
+ques_url <- setdiff(proganda_reasoning$value,mild_question$value)
+
+
+ques_source <- propaganda %>%
+  filter(str_detect(reasoning, paste(ques_url, collapse="|"))) #623
+
+mild_source <- propaganda %>%
+  filter(!str_detect(reasoning, paste(ques_url, collapse="|")))  #179
+  
+intersect(ques_source$source,mild_source$source)
+
+### based on mild questionable urls that are labelled mainly because of lack of transparency, ideological bias, propaganda, or censorship.
+
+mild_url <- c(as.vector(mild_source$source), demorgop_list)
+
+mild_url
+
+##Futher clean questionable url
+realques_url <- questionable_url %>%
+  filter(!source %in% mild_url)  #1648, after filtering official websites and mild websites
+```
+
+
+```{r}
+cons_factrep <- realques_url %>%
+  filter(category == "conspiracy-pseudoscience") %>% #443
+  filter(!is.na(factual_reporting)) %>% # 432
+  filter(!factual_reporting %in% c("mostly factual","high"))  #430
+#for urls without factual report, they are is currently pending or under review. so need to filter them out. and then further filter out url with high factual reporting. 
+
+#don't use mbfc's credibility rating because in our dataset, they only give two option, NA or low credibility
+ques_factrep <- realques_url %>%
+  filter(category == "questionable source")   #1205
+
+ques_factrep_na <- ques_factrep %>%
+  filter(is.na(factual_reporting)) #343
+#Therefore, we are retiring this source due to inactivity or This source is no longer online when MBFC updated
+#infor about these sources. 
+
+##Combine sources with factual report. 
+
+unreliable <- rbind(ques_factrep %>%
+                      filter(!is.na(factual_reporting)), cons_factrep) 
+
+mbfc_unreliable <- unreliable %>%
+  select(source_short) #1292
+
+mbfc_unreliable <- mbfc_unreliable %>%
+  mutate(shortid = ifelse(nchar(source_short) < 8 , 1, 0)) %>%
+  mutate(source_short = ifelse(shortid ==1, str_pad(source_short, width = nchar(source_short)+1), source_short),
+         source_short = str_replace(source_short, " ", "^")) %>%
+  select(-shortid)   ##deal with short urls so that abcrt.com will not be labeled as unreliable due to its ending with rt.com
+
+saveRDS(mbfc_unreliable, "mbfc_unreliable_refined.rds")
+```
+
+
+```{r}
+low_fact <- unreliable %>%
+  filter(factual_reporting %in% c("low","very low")) %>%
+  select(source_short) #556
+
+low_fact <- low_fact %>%
+  mutate(shortid = ifelse(nchar(source_short) < 8 , 1, 0)) %>%
+  mutate(source_short = ifelse(shortid ==1, str_pad(source_short, width = nchar(source_short)+1), source_short),
+         source_short = str_replace(source_short, " ", "^")) %>%
+  select(-shortid) 
+
+#save(low_fact, file = here::here("data","low_fact.rda"))
+
+```
+

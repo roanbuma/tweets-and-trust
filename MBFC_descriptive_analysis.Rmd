@@ -1,0 +1,680 @@
+---
+title: "mbfc descriptives"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+    number_sections: yes
+  pdf_document:
+    toc: yes
+date: '2022-09-23'
+---
+
+```{r}
+knitr::purl("MBFC_descriptive_analysis.Rmd")
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load data
+
+```{r}
+df = readRDS("mbfc_full_prepared.rds")
+all_reasonings = readRDS("all_reasonings.rds")
+all_reasonings_df = readRDS("all_reasonings_df.rds")
+#output = readRDS("output.rds")
+```
+
+
+```{r}
+library(tidyverse)
+library(kableExtra)
+library(viridis)
+```
+
+
+# Basic Univariate Descriptives
+
+## Category
+
+```{r}
+category_descriptives = df %>%
+  group_by(category) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2)) %>%
+  rbind(tibble(category = "total", n = nrow(df), percentage = 100))
+
+category_descriptives
+```
+
+```{r}
+ggplot(df, aes(x = category)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Cons-Pseu","Ques-Source","Pro-Science","Satire"))+
+  theme(axis.text.x = element_text(angle=45))
+```
+
+## Reasoning
+
+```{r}
+table(df$reasoning_true, df$category)
+```
+
+When sources have been assigned the label "Questionable Source", the variable "reasoning" should include the reasons why the category was assigned. No other categories except Questionable Source have other values than NA in the reasoning variable.
+
+There are however 17 questionable sources that lack a reasoning for their questionable nature.
+
+```{r}
+length(all_reasonings)
+
+length(unique(all_reasonings))
+
+length(all_reasonings)/sum(df$category=="questionable source")
+```
+
+Looking at the reasons given for the questionable labels, a total of 5365 reasons (excluding NAs) have been given, with an average of 3.36 reasons per questionable item.
+
+```{r}
+all_reasonings_df %>%
+  group_by(reasons) %>%
+  summarise(n = n(),
+            percentage = round(n()/4441*100, 2)) %>%
+  arrange(desc(percentage)) %>%
+  filter(percentage > 1)
+
+all_reasonings_df %>%
+  group_by(reasons) %>%
+  count %>%
+  filter(n > 9) %>%
+  ggplot(aes(x = reorder(reasons,n), y = n)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45)) +
+  coord_flip()+
+  labs(title = "Most common reasons for inclusion in Questionable category",
+       subtitle = "Reasons with less than 10 occurances have been removed",
+       x="")
+```
+
+The most common reasons given are lack of transparency, propaganda, false information, imposter site, poor sourcing, conspiracy, extreme right and fake news.
+
+```{r}
+all_reasonings_df %>%
+  mutate(orientation = case_when(
+    str_detect(reasons, "left") ~ "left",
+    str_detect(reasons, "right") ~ "right"
+  )) %>%
+  group_by(orientation) %>%
+  tally()
+```
+
+
+## Bias Rating
+
+Bias Rating Labels in order of size
+
+```{r}
+df %>%
+  group_by(bias_rating) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2)) %>%
+  arrange(desc(percentage))
+```
+
+## orientation
+
+```{r}
+orientation_counts = df %>%
+  group_by(orientation) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+
+orientation_counts
+
+saveRDS(orientation_counts, "orientation_counts.rds")
+
+n_right_sources = df %>%
+  filter(orientation == "right") %>%
+  tally()
+
+n_left_sources = df %>%
+  filter(orientation == "left") %>%
+  tally()
+
+n_right_sources / n_left_sources
+```
+
+```{r}
+ggplot(df, aes(x = orientation)) +
+  geom_bar(stat = "count") +
+  theme_bw()
+```
+
+Detect "conspiracy" / "pseudoscience" or pro-science in bias ratings
+
+```{r}
+df = df %>%
+  mutate(science = case_when(
+    str_detect(bias_rating, "conspiracy") ~ "conspiracy/pseudoscience",
+    str_detect(bias_rating, "pseudoscience") ~ "conspiracy/pseudoscience",
+    str_detect(bias_rating, "psuedoscience") ~ "conspiracy/pseudoscience",
+    str_detect(bias_rating, "pro science") ~ "pro science",
+    !is.na(bias_rating) ~ "any other label"
+  ))
+
+df %>%
+  group_by(science) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+```
+
+## Factual Reporting
+
+```{r}
+df %>%
+  group_by(factual_reporting) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+```
+
+```{r}
+ggplot(df, aes(x = factual_reporting)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+The factual reporting seems to have a bimodial distribution. Possibly due to the rules that are used to determined the factual reporting scores.
+
+## Country
+
+```{r}
+df %>%
+  group_by(country) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2)) %>%
+  arrange(desc(percentage))
+
+df %>%
+  group_by(country) %>%
+  count %>%
+  filter(n > 9) %>%
+  ggplot(aes(x = country, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45)) +
+  labs(subtitle = "countries with less than 10 sources have been removed")
+```
+Overall, the USA have the most sources. After that, the UK and Canada have relatively many sources compared to all other countries. This is probably the result of English language. 
+
+## Press Freedom rating
+
+```{r}
+df %>%
+  group_by(press_freedom_rating) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+
+ggplot(df, aes(x = press_freedom_rating)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+## Media Type
+
+```{r}
+df %>%
+  group_by(media_type) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2)) %>%
+  arrange(desc(percentage))
+
+df %>%
+  group_by(media_type) %>%
+  count %>%
+  filter(n > 9) %>%
+  ggplot(aes(x = media_type, y = n)) +
+  geom_bar(stat = "identity") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45)) +
+  labs(subtitle = "media types with less than 10 sources have been removed")
+```
+
+## Traffic / Popularity
+
+```{r}
+df %>%
+  group_by(traffic_popularity) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+
+ggplot(df, aes(x = traffic_popularity)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+## MBFC Credibility Rating
+
+```{r}
+df %>%
+  group_by(mbfc_credibility_rating) %>%
+  summarise(n = n(),
+            percentage = round(n()/5157*100, 2))
+
+ggplot(df, aes(x = mbfc_credibility_rating)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle=45))
+```
+
+# Bivariate Descriptive Analysis 
+
+## Combining Category with Bias Rating
+
+### Least Biased
+
+```{r}
+df %>%
+  filter(category == "least biased") %>%
+  group_by(bias_rating) %>%
+  summarise(n())
+```
+
+### Left Bias
+
+```{r}
+df %>%
+  filter(category == "left bias") %>%
+  group_by(bias_rating) %>%
+  summarise(n())
+```
+
+### Left Center Bias
+
+```{r}
+df %>%
+  filter(category == "left-center bias") %>%
+  group_by(bias_rating) %>%
+  summarise(n())
+```
+
+### Right-Center Bias
+
+```{r}
+df %>%
+  filter(category == "right-center bias") %>%
+  group_by(bias_rating) %>%
+  summarise(n())
+```
+
+### Right Bias
+
+```{r}
+df %>%
+  filter(category == "right bias") %>%
+  group_by(bias_rating) %>%
+  summarise(n())
+```
+
+### Conspiracy-Pseudoscience
+
+```{r}
+df %>%
+  filter(category == "conspiracy-pseudoscience") %>%
+  group_by(bias_rating) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+df %>%
+  filter(category == "conspiracy-pseudoscience") %>%
+  group_by(orientation) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+Of the sources categorized as "conspiracy-pseudoscience", 187 contain the word "Right" in their bias rating, whereas only 16 contain the word "Left" in their bias rating.
+
+### Questionable Sources
+
+```{r}
+df %>%
+  filter(category == "questionable source") %>%
+  group_by(bias_rating) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+```{r}
+df %>%
+  filter(category == "questionable source") %>%
+  group_by(orientation) %>%
+  summarise(n = n()) %>%
+  arrange(desc(n))
+```
+
+Of the sources categorized as "questionable source", 1070 contain the word "Right" in their bias rating, whereas only 100 contain the word "Left" in their bias rating.
+
+### Crosstable Category and Orientation 
+
+```{r}
+table(df$category, df$orientation, useNA = "ifany")
+
+nrow(df)
+```
+
+```{r}
+table_category_orientation = df %>%
+  group_by(category, orientation) %>%
+  tally() %>%
+  pivot_wider(names_from = orientation, values_from = n) %>%
+  mutate(total = sum(left,right,`least biased`,`any other label`,`NA`, na.rm = T)) %>%
+  mutate(percentage = round(total/nrow(df)*100,1)) %>%
+  mutate(total_orientation = sum(left,right,`least biased`,`any other label`, na.rm = T)) %>%
+  # calculate percentages
+  mutate(left_percentage = round(left/total*100,1)) %>%
+  mutate(right_percentage = round(right/total*100,1))
+
+table_category_orientation_2 = table_category_orientation %>%
+  select(!c(`NA`,`least biased`,`any other label`,total_orientation)) %>%
+  relocate(category, total, percentage, left, left_percentage, right, right_percentage)
+
+table_category_orientation_2[is.na(table_category_orientation_2)] = 0
+
+
+table_category_orientation_2 = table_category_orientation_2 %>%
+  rbind(tibble(category = "total",
+               total = nrow(df),
+               percentage = round(100,1),
+               left = nrow(df %>% filter(orientation=="left")),
+               left_percentage = round(nrow(df %>% filter(orientation=="left"))/nrow(df)*100,1),
+               right = nrow(df %>% filter(orientation=="right")),
+               right_percentage = round(nrow(df %>% filter(orientation=="right"))/nrow(df)*100,1),
+               )
+        )
+
+table_category_orientation_2
+
+table_category_orientation_2_kable = table_category_orientation_2 %>%
+  kbl(format="latex",
+      #col.names = c("cat","source","N","cat","source","N"),
+      vline = "",
+      toprule = "\\toprule",
+      bottomrule = "\\bottomrule",
+      midrule = "\\midrule",
+      linesep = "")
+
+nrow(df[is.na(df$bias_rating),])
+```
+
+### Crosstable Category and Conspiracy / Pseudoscience
+
+```{r}
+table(df$category, df$science, useNA = "ifany")
+```
+
+### Analysis
+
+- The questionable source category is biased towards right-wing sources, as there are 800 sources containing the word "right" compared to 51 sources containing the word "left" in the bias rating of sources in this category. 
+- There seem to be some irregularities in the data. For instance, 19 sources that have the conspiracy-pseudoscience category, do not have the words "conspiracy" or "pseudoscience" in their bias ratings.
+
+```{r}
+table(df$orientation, useNA = "ifany")
+```
+
+```{r}
+table(df$category, useNA = "ifany")
+```
+
+- Categories and Bias Ratings do not align well
+- Many left-center or left categories do not include the word "left" in their bias rating
+- Many sources including the word "right" in their bias ratings are categorized as questionable sources
+
+## Combining Category and Factual reporting
+
+```{r}
+table(df$category, df$factual_reporting, useNA = "ifany")
+```
+
+- This table confirms that if sources are given the very low or low rating on factual reporting, these sources are automatically labelled as either conspiracy-pseudoscience or questionable source. 
+- Not all conspiracy-pseudoscience and questionable sources however all have very low or low levels of mixed reporting. Many of these sources have mixed factual reporting. Three of these sources have mostly factual or high factual reporting.
+- Surprisingly, a large amount of sources with NA's for factual reporting still fall under the reliable bias categories (left, left-cent, cent, right-cent, right)
+- A large number of sources in unreliable categories (conspiracy-pseudoscience, questionable sources) have NA's for factual reporting, but factual reporting is not a pre-requisite for being assigned to these categories.
+- Overall, most unreliable categories have very low or low factual reporting, whereas most reliable categories have mixed, mostly factual, high or very high factual reporting.
+- There seems to be a correlation between factual reporting and bias within the reliable bias categories (left, left-cent, cent, right-cent, right). Higher factual reporting scores seem to be more common in the center than in the left and right extremes of the bias spectrum.
+
+```{r}
+ggplot(df, aes(x = category, fill=fct_rev(factual_reporting))) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  #scale_fill_manual(values = c("darkgreen","green","yellow","orange","red","darkred"))+
+  scale_fill_viridis(discrete = T, na.value = "grey50", direction=-1)+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "",
+       y = "",
+       fill = "Factual Reporting",
+       #title = "Bias Categories and Factual Reporting of MBFC",
+       #subtitle = "Frequency of Factual Reporting Levels per Bias Category",
+       #caption = "Data scraped 19-9-2022 from mediabiasfactcheck.com"
+       )
+
+ggsave("categories_and_factual_reporting.pdf", width = 6, height=2.5)
+```
+
+```{r}
+ggplot(df, aes(x = category, fill=fct_rev(factual_reporting))) +
+  geom_bar(stat = "count", position="fill") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  #scale_fill_manual(values = c("darkgreen","green","yellow","orange","red","darkred"))+
+  scale_fill_viridis(discrete = T, na.value = "grey50", direction=-1)+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "",
+       y = "",
+       fill = "Factual Reporting",
+       title = "Bias Categories and Factual Reporting of MBFC",
+       subtitle = "Percentage of Factual Reporting Levels per Bias Category",
+       caption = "Data scraped 19-9-2022 from mediabiasfactcheck.com")
+```
+
+## Combining category with mbfc credibility rating
+
+```{r}
+table(df$category, df$mbfc_credibility_rating, useNA = "ifany")
+```
+
+## Combining category and media type
+
+```{r}
+#table(df$category, df$media_type)
+```
+
+## Combining orientation (based on bias rating) with mbfc credibility
+
+```{r}
+table(df$orientation, df$mbfc_credibility_rating)
+```
+
+Again, based on the mbfc credibility ratings, the data seems skewed. Left bias labels are approximately twice as less common as right bias labels, but about twice as much "left"-labelled sources have a high credibility rating as "right"-labelled sources. For low credibility, the difference is larger: 977 "right"-labelled sources have a low credibility rating while 67% of "left"-labelled sources have a this rating. For medium credibility the numbers are about the same, but the relative percentages would still be lower for "right"-labelled sources (since there are about twice as much)
+
+- to do: calculate percentage of left / right sources that have these ratings compared to the totals
+
+- to do: check methodology involved in calculating mbfc credibility ratings; calculate these scores based on the data and see if the scores match
+
+
+
+```{r}
+df %>%
+  filter(str_detect(reasoning, "propaganda")) %>%
+  group_by(category) %>%
+  summarise(n())
+```
+
+```{r}
+df %>%
+  filter(!is.na(reasoning)) %>%
+  group_by(category) %>%
+  summarise(n())
+```
+
+
+
+```{r}
+category_totals = df %>%
+  group_by(category) %>%
+  summarise(n_total = n())
+
+category_totals_no_na = df %>%
+  filter(!is.na(bias_rating)) %>%
+  group_by(category) %>%
+  summarise(n_total_no_na = n())
+
+
+category_bias = df %>%
+  group_by(category, orientation) %>%
+  summarise(n_orientation = n())%>%
+  left_join(category_totals) %>%
+  left_join(category_totals_no_na)
+
+category_bias %>%
+  mutate(percentage = round(n_orientation / n_total * 100, 2)) %>%
+  mutate(percentage2 = round(n_orientation / n_total_no_na * 100, 2)) %>%
+  select(category, orientation, percentage, percentage2)
+```
+
+
+```{r}
+df %>%
+  ggplot(aes(x = category, fill=orientation)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  scale_fill_manual(values = c("grey","magenta","blue","red","grey"))+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "",
+       y = "",
+       fill = "Bias Rating",
+       title = "Bias Categories and Bias Ratings of MBFC",
+       subtitle = "Frequency of 'left', 'right', 'least biased', and other labels in Bias Ratings for each Bias Category",
+       caption = "Data scraped 19-9-2022 from mediabiasfactcheck.com")
+
+
+# Paper version
+df %>%
+  filter(!is.na(bias_rating)) %>%
+  ggplot(aes(x = category, fill=orientation)) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  scale_fill_manual(values = c("grey","magenta","blue","red","grey"),
+                      labels = c("Other Label","Least Biased","Left","Right"))+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "Category",
+       y = "",
+       fill = "Bias Rating")
+
+ggsave("mbfc_biascategories_biasratings.pdf", width = 7, height = 3)
+```
+
+
+
+
+```{r}
+df %>%
+  filter(!is.na(bias_rating)) %>%
+  ggplot(aes(x = category, fill=orientation)) +
+  geom_bar(stat = "count", position = "fill") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  scale_fill_manual(values = c("grey","magenta","blue","red","grey"))+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "",
+       y = "",
+       fill = "Bias Rating",
+       title = "Bias Categories and Bias Ratings of MBFC",
+       subtitle = "Percentage of 'left', 'right', 'least biased', and other labels in Bias Ratings for each Bias Category",
+       caption = "Data scraped 19-9-2022 from mediabiasfactcheck.com")
+```
+
+
+# 2023 THESIS addition: media type vs factual reporting and 
+
+```{r}
+df %>%
+  group_by(media_type) %>%
+  tally() %>%
+  arrange(desc(n))
+
+df = df %>%
+  mutate(media_type_grouped = case_when(
+    str_detect(media_type, "newspaper|tv station|magazine|radio|news|journal") ~ "traditional media",
+    str_detect(media_type, "organization|foundation") ~ "organization/foundation",
+    str_detect(media_type, "website") ~ "websites",
+    is.na(media_type) ~ NA,
+    TRUE ~ "other" # should be empty
+    ))
+
+table(df$legacy)
+
+# legacy
+df %>%
+  filter(media_type_grouped == "traditional media") %>%
+  group_by(media_type) %>%
+  tally() %>%
+  arrange(desc(n))
+
+# website
+df %>%
+  filter(media_type_grouped == "websites") %>%
+  group_by(media_type) %>%
+  tally() %>%
+  arrange(desc(n))
+
+# org/found
+df %>%
+  filter(media_type_grouped == "organization/foundation") %>%
+  group_by(media_type) %>%
+  tally() %>%
+  arrange(desc(n))
+
+
+
+
+```
+
+
+```{r}
+ggplot(df, aes(x = category, fill=fct_rev(media_type_grouped))) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_x_discrete(labels = c("Left","Cent-Left","Cent","Cent-Right","Right","Consp-Pseu","Questionable","Pro-Science","Satire"))+
+  scale_fill_viridis(discrete = T, na.value = "grey50", direction=-1)+
+  theme(axis.text.x = element_text(angle=15)) +
+  labs(x = "",
+       y = "",
+       fill = "Media Type"
+       )
+
+ggsave("categories_and_media_type.pdf", width = 6, height=2.5)
+```
+
+```{r}
+df %>%
+  mutate(reliable = ifelse(category=="conspiracy-pseudoscience" | category== "questionable source", "unreliable", "reliable")) %>%
+  ggplot(aes(x = reliable, fill=fct_rev(media_type_grouped))) +
+  geom_bar(stat = "count") +
+  theme_bw() +
+  scale_fill_viridis(discrete = T, na.value = "grey50", direction=-1)+
+  labs(x = "",
+       y = "",
+       fill = "Media Type"
+       )
+```
+
