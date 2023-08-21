@@ -1,0 +1,105 @@
+---
+title: "Untitled"
+output: html_document
+date: "2023-03-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# packages
+library(tidyverse)
+library(academictwitteR)
+```
+
+```{r}
+# load TK leden data
+TK_leden = readRDS("TK_leden_full.RDS")
+```
+
+Since when are members in TK?
+
+```{r}
+TK_leden %>%
+  ggplot(aes(x = Van)) +
+  geom_histogram(binwidth = 365) 
+```
+
+```{r}
+TK_na_2017 = TK_leden %>% filter(Van > "2017-01-01T00:00:00Z") %>% nrow()
+TK_voor_2017 = TK_leden %>% filter(Van < "2017-01-01T00:00:00Z") %>% nrow()
+TK_na_2017
+TK_voor_2017
+paste((TK_na_2017/150*100),"%")
+```
+
+I will scrape all tweets after 1-1-2017 for the following reasons:
+
+- 126 TK leden have been there only after 1-1-2017 (84%), while 24 have been there before 1-1-2017. Tweets will be filtered later to only include tweets when the TK leden were actually in parliament (and maybe the three months leading up to elections, because of campaigns)
+- period comprises final months of TK elections 2017 and TK elections 2021
+- period comprises Covid
+- period comprises Ukraine war
+
+# Scraping with get_all_tweets
+
+Get all tweets from all users from 1-1-2017 to 13-3-2023 (or today)
+
+```{r}
+##input variables:
+start = "2017-01-01T00:00:00Z"
+end =  "2023-01-01T00:00:00Z"
+user_list = TK_leden$twitter
+
+tweets = get_all_tweets(users = user_list,
+                        start_tweets = start,
+                        end_tweets = end,
+                        bearer_token = get_bearer(),
+                        # n = infinite, get all tweets
+                        n = Inf,
+                        data_path = paste("tweets/tweets_",user,sep="")
+                        )
+
+# save to RDS if code has not crashed in between
+saveRDS(tweets, "tweets.RDS")
+```
+
+# scraping with get_user_timeline
+
+This function only allows to scrape the 3200 most recent tweets of any legislator, due to limitations by twitter.
+Still, it is useful to do this to be able to make some preliminary analyses
+
+```{r}
+start = "2017-01-01T00:00:00Z"
+end =  "2023-03-24T00:00:00Z"
+user_list = TK_leden %>%
+  filter(!is.na(twitter)) %>%
+  pull(user_id)
+n_tweets=1
+
+
+
+for (i in seq(1:length(user_list))){
+  user = user_list[i]
+  print(user)
+  print(paste("user",i,"/",length(user_list)))
+  
+  get_user_timeline(user,
+                  start_tweets = start, 
+                  end_tweets = end,
+                  bearer_token = get_bearer(),
+                  data_path = paste("test/tweets_",user,sep=""),
+                  file = paste("test/tweets_",user,".RDS",sep=""),
+                  n = n_tweets)
+}
+
+
+```
+
+```{r}
+tweets = bind_tweets("data_tweets_usertimeline")
+
+saveRDS(tweets, "tweets_sample.RDS")
+```
+

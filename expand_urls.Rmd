@@ -1,0 +1,74 @@
+---
+title: "test"
+output: html_document
+date: "2023-03-22"
+---
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+# Set up some example data
+df <- data.frame(x = rnorm(100), y = rnorm(100))
+
+# Define the function that you want to apply over each row of the dataframe
+my_function <- function(x, y) {
+  # This is just an example - replace with your own time-consuming code
+  Sys.sleep(1)  # Sleep for 1 second to simulate time-consuming code
+  return(x + y)
+}
+
+# Set up a loop to apply the function over each row of the dataframe
+for (i in seq_len(nrow(df))) {
+  # Use tryCatch() to catch any errors that might occur
+  result <- tryCatch({
+    my_function(df$x[i], df$y[i])
+  }, error = function(e) {
+    # If an error occurs, print a message and return NULL
+    cat("Error: ", conditionMessage(e), "\n")
+    return(NULL)
+  })
+  
+  # Save the result after each row using saveRDS()
+  saveRDS(result, file = paste0("result_", i, ".rds"))
+}
+
+# Set up a loop to resume where the previous loop left off
+for (i in seq_len(nrow(df))) {
+  # Use tryCatch() to catch any errors that might occur
+  result <- tryCatch({
+    readRDS(file = paste0("result_", i, ".rds"))
+  }, error = function(e) {
+    # If an error occurs, print a message and return NULL
+    cat("Error: ", conditionMessage(e), "\n")
+    return(NULL)
+  })
+  
+  # If the result is not NULL, print it to the console
+  if (!is.null(result)) {
+    cat("Result for row ", i, ": ", result, "\n")
+  }
+}
+```
+
+
+
+
+
+
+
+```{r}
+
+```
+
